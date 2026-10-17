@@ -42,7 +42,7 @@ if exist "venv\Scripts\pyinstaller.exe" (
         echo [OK] Successfully built: SarvatraAI.exe
     )
 ) else (
-    echo [WARNING] PyInstaller not found in venv. Skipping .exe build (run build_exe.bat to install PyInstaller).
+    echo [WARNING] PyInstaller not found in venv. Skipping .exe build. Run build_exe.bat to install PyInstaller.
 )
 echo.
 
