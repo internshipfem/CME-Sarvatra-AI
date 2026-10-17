@@ -51,6 +51,8 @@ def extract_text_from_file(file_path, original_filename=None):
                     if page_text.strip():
                         pages_text.append(f"--- Page {idx + 1} ---\n{page_text}")
                 extracted = "\n\n".join(pages_text)
+                if not extracted.strip():
+                    extracted = "[Notice: No selectable digital text could be found in this PDF. It appears to be a scanned image or saved as graphic outlines rather than selectable text.]"
             except Exception as e:
                 logger.error(f"Error parsing PDF {filename}: {e}")
                 extracted = f"[Error reading PDF: {e}]"

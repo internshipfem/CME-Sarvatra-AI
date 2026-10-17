@@ -39,6 +39,37 @@ C) TO DEACTIVATE LATER:
 
 
 --------------------------------------------------------------------------------
+AIR-GAPPED PACKAGING & DEPLOYMENT (BUILD & INSTALL)
+--------------------------------------------------------------------------------
+
+A) TO BUILD THE ZIP BUNDLE (ON CONNECTED/DEV MACHINE):
+------------------------------------------------------
+Double-click or run:
+    build.bat
+
+This will:
+  1. Download all required Python wheel packages into 'wheels/'.
+  2. Create 'Ollama_Chat_AirGapped_Bundle.zip' excluding venv, database, 
+     and temporary files.
+
+
+B) TO INSTALL ON THE AIR-GAPPED TARGET MACHINE:
+-----------------------------------------------
+1. Copy 'Ollama_Chat_AirGapped_Bundle.zip' to the air-gapped machine.
+2. Extract the ZIP into your desired destination folder.
+3. Double-click or run:
+       install.bat
+
+This will:
+  - Create a new virtual environment ('venv') automatically.
+  - Install all dependencies 100% offline from the bundled 'wheels/' directory.
+  - Apply migrations and auto-create the default admin account.
+
+4. To launch the app, double-click:
+       run_app.bat
+
+
+--------------------------------------------------------------------------------
 STEP 3: RUN THE APPLICATION
 --------------------------------------------------------------------------------
 

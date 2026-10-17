@@ -18,6 +18,10 @@ db.sqlite3-journal
 media/uploads/
 staticfiles/
 
+# Archives & Bundled Wheels
+*.zip
+wheels/
+
 # IDE & OS files
 .vscode/
 .idea/
