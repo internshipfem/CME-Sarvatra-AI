@@ -523,12 +523,58 @@ body {
   border-radius: var(--radius-md);
   cursor: pointer;
   transition: all 0.15s ease;
+  user-select: none;
 }
 
 .sidebar-toggle-btn:hover {
   background-color: var(--bg-card-hover);
   color: var(--text-primary);
   border-color: rgba(255, 255, 255, 0.25);
+}
+
+.sidebar-toggle-btn.collapsed-mode {
+  background-color: rgba(59, 130, 246, 0.18);
+  border-color: rgba(59, 130, 246, 0.5);
+  color: #93c5fd;
+  padding: 6px 12px;
+  gap: 6px;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.2);
+}
+
+.sidebar-toggle-btn.collapsed-mode:hover {
+  background-color: rgba(59, 130, 246, 0.3);
+  border-color: #60a5fa;
+  color: #fff;
+}
+
+/* Floating tab pinned to left edge when sidebar is collapsed */
+.floating-sidebar-tab {
+  display: none;
+  position: absolute;
+  left: 0;
+  top: 68px;
+  z-index: 45;
+  background-color: var(--bg-card);
+  border: 1px solid rgba(59, 130, 246, 0.4);
+  border-left: none;
+  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+  padding: 8px 12px 8px 10px;
+  color: #93c5fd;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-md);
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.floating-sidebar-tab:hover {
+  background-color: var(--bg-card-hover);
+  color: #fff;
+  border-color: #3b82f6;
+  padding-left: 14px;
 }
 
 .model-selector-wrapper {

@@ -1180,22 +1180,83 @@ function scrollToBottom() {
     }
 }
 
-function initSidebarState() {
-    const isCollapsed = localStorage.getItem('sarvatra_sidebar_collapsed') === 'true';
+function updateSidebarUIState(isOpen) {
     const sidebar = document.getElementById('sidebar');
     const toggleBtn = document.getElementById('sidebarToggle');
-    if (sidebar && window.innerWidth > 768) {
-        if (isCollapsed) {
+    const toggleIcon = document.getElementById('sidebarToggleIcon');
+    const toggleText = document.getElementById('sidebarToggleText');
+    const floatingTab = document.getElementById('floatingSidebarTab');
+    const layout = document.querySelector('.app-layout');
+
+    if (!isOpen) {
+        // Collapsed state
+        if (sidebar) {
             sidebar.classList.add('collapsed');
-            if (toggleBtn) {
-                toggleBtn.setAttribute('title', 'Expand sidebar (Ctrl+B)');
-            }
-        } else {
-            sidebar.classList.remove('collapsed');
-            if (toggleBtn) {
-                toggleBtn.setAttribute('title', 'Collapse sidebar (Ctrl+B)');
-            }
+            sidebar.classList.remove('open');
         }
+        if (layout) layout.classList.add('sidebar-collapsed');
+
+        if (toggleBtn) {
+            toggleBtn.classList.add('collapsed-mode');
+            toggleBtn.setAttribute('title', 'Open sidebar (Ctrl+B)');
+        }
+        if (toggleIcon) {
+            toggleIcon.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
+                </svg>
+            `;
+        }
+        if (toggleText) {
+            toggleText.style.display = 'inline';
+            toggleText.textContent = 'Open Sidebar';
+        }
+        if (floatingTab) {
+            floatingTab.style.display = 'flex';
+        }
+    } else {
+        // Open state
+        if (sidebar) {
+            sidebar.classList.remove('collapsed');
+        }
+        if (layout) layout.classList.remove('sidebar-collapsed');
+
+        if (toggleBtn) {
+            toggleBtn.classList.remove('collapsed-mode');
+            toggleBtn.setAttribute('title', 'Collapse sidebar (Ctrl+B)');
+        }
+        if (toggleIcon) {
+            toggleIcon.innerHTML = `
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="9" y1="3" x2="9" y2="21"></line>
+                    <polyline points="14 9 11 12 14 15"></polyline>
+                </svg>
+            `;
+        }
+        if (toggleText) {
+            toggleText.style.display = 'none';
+        }
+        if (floatingTab) {
+            floatingTab.style.display = 'none';
+        }
+    }
+}
+
+function initSidebarState() {
+    const isMobile = window.innerWidth <= 768;
+    const sidebar = document.getElementById('sidebar');
+    if (!sidebar) return;
+
+    if (isMobile) {
+        sidebar.classList.remove('collapsed');
+        sidebar.classList.remove('open');
+        updateSidebarUIState(false);
+    } else {
+        const isCollapsed = localStorage.getItem('sarvatra_sidebar_collapsed') === 'true';
+        updateSidebarUIState(!isCollapsed);
     }
 }
 
@@ -1206,22 +1267,22 @@ function toggleSidebarCollapse(event) {
     }
     const sidebar = document.getElementById('sidebar');
     const backdrop = document.getElementById('sidebarBackdrop');
-    const toggleBtn = document.getElementById('sidebarToggle');
     if (!sidebar) return;
 
-    if (window.innerWidth <= 768) {
-        // Mobile drawer toggle
+    const isMobile = window.innerWidth <= 768;
+
+    if (isMobile) {
+        sidebar.classList.remove('collapsed');
         const isOpen = sidebar.classList.toggle('open');
-        if (backdrop) {
-            backdrop.classList.toggle('active', isOpen);
-        }
+        if (backdrop) backdrop.classList.toggle('active', isOpen);
+        updateSidebarUIState(isOpen);
     } else {
-        // Desktop collapse toggle
-        const isCollapsed = sidebar.classList.toggle('collapsed');
-        localStorage.setItem('sarvatra_sidebar_collapsed', isCollapsed ? 'true' : 'false');
-        if (toggleBtn) {
-            toggleBtn.setAttribute('title', isCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)');
-        }
+        sidebar.classList.remove('open');
+        if (backdrop) backdrop.classList.remove('active');
+        const currentlyCollapsed = sidebar.classList.contains('collapsed');
+        const newCollapsed = !currentlyCollapsed;
+        localStorage.setItem('sarvatra_sidebar_collapsed', newCollapsed ? 'true' : 'false');
+        updateSidebarUIState(!newCollapsed);
     }
 }
 window.toggleSidebarCollapse = toggleSidebarCollapse;
@@ -1236,6 +1297,20 @@ window.closeSidebarMobile = closeSidebarMobile;
 
 function setupSidebarToggle() {
     initSidebarState();
+
+    // Direct event listener binding
+    const toggleBtn = document.getElementById('sidebarToggle');
+    if (toggleBtn) {
+        toggleBtn.addEventListener('click', toggleSidebarCollapse);
+    }
+    const floatingTab = document.getElementById('floatingSidebarTab');
+    if (floatingTab) {
+        floatingTab.addEventListener('click', toggleSidebarCollapse);
+    }
+    const collapseBtn = document.getElementById('btnSidebarCollapse');
+    if (collapseBtn) {
+        collapseBtn.addEventListener('click', toggleSidebarCollapse);
+    }
 
     // Resize listener to adapt collapse state between mobile & desktop
     window.addEventListener('resize', () => {
@@ -1256,8 +1331,17 @@ function setupSidebarToggle() {
         }
     });
 
-    // Document-level event delegation for Copy Buttons (Code, Table, Message)
+    // Document-level event delegation for Copy Buttons and Sidebar Toggle
     document.addEventListener('click', (e) => {
+        // Sidebar toggle delegation fallback
+        const sidebarClick = e.target.closest('#sidebarToggle, #floatingSidebarTab, #btnSidebarCollapse');
+        if (sidebarClick) {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleSidebarCollapse(e);
+            return;
+        }
+
         // Copy Code button
         const copyCodeBtn = e.target.closest('.btn-copy-code');
         if (copyCodeBtn) {
