@@ -7,6 +7,11 @@ import sys
 def main():
     """Run administrative tasks."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ollama_web.settings')
+    
+    # Default 'runserver' to 0.0.0.0:8000 so the app is accessible across the local network / web
+    if len(sys.argv) == 2 and sys.argv[1] == 'runserver':
+        sys.argv.append('0.0.0.0:8000')
+
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

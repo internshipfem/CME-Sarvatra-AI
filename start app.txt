@@ -97,7 +97,7 @@ Double-click:
     run_app.bat
 
 (This automatically checks Python 3.7.9, checks Ollama models, runs migrations, 
-opens your browser to http://127.0.0.1:8000, and starts the server).
+opens your browser to http://127.0.0.1:8000, and starts the server on 0.0.0.0:8000).
 
 
 METHOD 2: MANUAL COMMAND LINE
@@ -105,10 +105,31 @@ METHOD 2: MANUAL COMMAND LINE
 1. Activate the venv (as shown in Step 2).
 2. Start the Django development server:
 
-    python manage.py runserver 127.0.0.1:8000
+    python manage.py runserver
 
-3. Open your browser and navigate to:
-    http://127.0.0.1:8000
+   (Note: 'manage.py' is configured to automatically bind to 0.0.0.0:8000)
+
+3. Accessing the Application:
+   - On this machine (Local):
+     http://127.0.0.1:8000  or  http://localhost:8000
+
+   - Anyone on the Local Network / Wi-Fi / Intranet:
+     http://<YOUR_IP_ADDRESS>:8000
+     (Example: http://192.168.0.116:8000)
+
+   * To find your IPv4 address in terminal, run:
+     ipconfig
+
+
+--------------------------------------------------------------------------------
+100% AIR-GAPPED & OFFLINE VERIFICATION
+--------------------------------------------------------------------------------
+- Zero External CDNs: All CSS and JS libraries (marked.js, highlight.js, highlight-dark.css)
+  are stored locally in 'static/vendor/'.
+- Native Typography: Uses system font stacks (no Google Fonts network calls).
+- Inline SVG Icons: All icons render locally without web icon fonts.
+- Offline Python Wheels: All Python dependencies are bundled in 'wheels/'.
+- ALLOWED_HOSTS = ['*']: Configured in 'ollama_web/settings.py' for full network access.
 
 
 --------------------------------------------------------------------------------

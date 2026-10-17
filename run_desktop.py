@@ -19,7 +19,25 @@ def open_browser():
         pass
 
 
+import socket
+
+def get_lan_ip():
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.5)
+        s.connect(('10.255.255.255', 1))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        try:
+            return socket.gethostbyname(socket.gethostname())
+        except Exception:
+            return '127.0.0.1'
+
+
 def main():
+    lan_ip = get_lan_ip()
     print("=" * 65)
     print("     Sarvatra AI - College of Military Engineering, Pune")
     print("=" * 65)
@@ -29,12 +47,15 @@ def main():
     except Exception as e:
         print(f"[Notice] Migration: {e}")
 
-    print("[*] Opening application in browser: http://127.0.0.1:8000 ...")
+    print("[*] Opening local browser: http://127.0.0.1:8000 ...")
     threading.Thread(target=open_browser, daemon=True).start()
 
-    print("[*] Server active. Close this console window to exit.\n")
+    print("[*] Server active on 0.0.0.0:8000 (accessible on local network / web)")
+    print(f"[*] Local Access:   http://127.0.0.1:8000")
+    print(f"[*] Network Access: http://{lan_ip}:8000")
+    print("    Close this console window to exit.\n")
     try:
-        call_command('runserver', '127.0.0.1:8000', use_reloader=False)
+        call_command('runserver', '0.0.0.0:8000', use_reloader=False)
     except KeyboardInterrupt:
         print("\nExiting Sarvatra AI.")
 
