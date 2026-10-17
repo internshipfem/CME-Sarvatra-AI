@@ -33,17 +33,17 @@
         <nav class="conversations-nav" id="conversationsNav">
             <div class="nav-section-title">Your Conversations</div>
             {% for c in conversations %}
-                <div class="chat-item {% if active_conversation and active_conversation.id == c.id %}active{% endif %}" id="chat-item-{{ c.id }}" onclick="window.location.href='{% url 'chat_detail' c.id %}'" style="cursor: pointer;">
+                <div class="chat-item {% if active_conversation and active_conversation.id == c.id %}active{% endif %}" id="chat-item-{{ c.id }}" onclick="handleChatItemClick(event, '{% url 'chat_detail' c.id %}')" style="cursor: pointer;">
                     <span class="chat-item-title" title="{{ c.title }}">
                         {{ c.title }}
                     </span>
                     <div class="chat-item-actions">
-                        <button type="button" class="btn-icon-sm rename-chat-btn" data-id="{{ c.id }}" title="Rename" onclick="triggerRenameChat(event, '{{ c.id }}')">
+                        <button type="button" class="btn-icon-sm rename-chat-btn" data-id="{{ c.id }}" title="Rename" onclick="startInlineRename(event, '{{ c.id }}')">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                             </svg>
                         </button>
-                        <button type="button" class="btn-icon-sm delete delete-chat-btn" data-id="{{ c.id }}" title="Delete" onclick="triggerDeleteChat(event, '{{ c.id }}')">
+                        <button type="button" class="btn-icon-sm delete delete-chat-btn" data-id="{{ c.id }}" title="Delete" onclick="startInlineDelete(event, '{{ c.id }}')">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <polyline points="3 6 5 6 21 6"></polyline>
                                 <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>

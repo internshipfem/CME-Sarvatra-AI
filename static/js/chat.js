@@ -615,34 +615,106 @@ function setupEventHandlers() {
         btnRefreshModels.addEventListener('click', refreshOllamaModels);
     }
 
-    // Rename chat buttons (fallback listener)
-    document.querySelectorAll('.rename-chat-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const id = btn.getAttribute('data-id');
-            if (id) triggerRenameChat(e, id);
-        });
-    });
-
-    // Delete chat buttons (fallback listener)
-    document.querySelectorAll('.delete-chat-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            const id = btn.getAttribute('data-id');
-            if (id) triggerDeleteChat(e, id);
-        });
+    // Global click listener: clicking outside cancels any active inline rename or delete confirmation
+    document.addEventListener('click', (e) => {
+        if (!e.target.closest('.chat-item-inline-edit') && !e.target.closest('.chat-item-delete-confirm') && !e.target.closest('.btn-icon-sm')) {
+            cancelAllInlineActions();
+        }
     });
 }
 
-async function triggerRenameChat(event, id) {
+function handleChatItemClick(event, url) {
+    // If clicking on an input or inline action button, do not navigate
+    if (event.target.closest('.chat-item-inline-edit') || event.target.closest('.chat-item-delete-confirm') || event.target.closest('.chat-item-actions')) {
+        return;
+    }
+    const item = event.currentTarget;
+    if (item && (item.classList.contains('inline-editing') || item.classList.contains('inline-deleting'))) {
+        return;
+    }
+    window.location.href = url;
+}
+window.handleChatItemClick = handleChatItemClick;
+
+function cancelAllInlineActions() {
+    // Restore any inline editing
+    document.querySelectorAll('.chat-item.inline-editing').forEach(item => {
+        const id = item.id.replace('chat-item-', '');
+        cancelInlineRename(null, id);
+    });
+    // Restore any inline delete confirmations
+    document.querySelectorAll('.chat-item.inline-deleting').forEach(item => {
+        const id = item.id.replace('chat-item-', '');
+        cancelInlineDelete(null, id);
+    });
+}
+
+/* --- Inline Rename (Happens in place in sidebar) --- */
+
+function startInlineRename(event, id) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    cancelAllInlineActions();
+
+    const item = document.getElementById(`chat-item-${id}`);
+    if (!item) return;
+
+    const titleSpan = item.querySelector('.chat-item-title');
+    const currentTitle = titleSpan ? titleSpan.textContent.trim() : 'Conversation';
+
+    item.dataset.originalTitle = currentTitle;
+    item.classList.add('inline-editing');
+
+    item.innerHTML = `
+        <div class="chat-item-inline-edit" onclick="event.stopPropagation()">
+            <input type="text" class="chat-rename-input" id="rename-input-${id}" value="${escapeHtml(currentTitle)}" maxlength="100" />
+            <button type="button" class="btn-inline-action btn-inline-save" title="Save" onclick="saveInlineRename(event, '${id}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+            </button>
+            <button type="button" class="btn-inline-action btn-inline-cancel" title="Cancel" onclick="cancelInlineRename(event, '${id}')">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+    `;
+
+    const input = document.getElementById(`rename-input-${id}`);
+    if (input) {
+        input.focus();
+        input.select();
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                saveInlineRename(e, id);
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelInlineRename(e, id);
+            }
+        });
+    }
+}
+window.startInlineRename = startInlineRename;
+
+async function saveInlineRename(event, id) {
     if (event) {
         event.preventDefault();
         event.stopPropagation();
     }
     const item = document.getElementById(`chat-item-${id}`);
-    const titleSpan = item ? item.querySelector('.chat-item-title') : null;
-    const currentTitle = titleSpan ? titleSpan.textContent.trim() : 'Conversation';
+    if (!item) return;
 
-    const newTitle = prompt('Rename Conversation:', currentTitle);
-    if (!newTitle || newTitle.trim() === '' || newTitle.trim() === currentTitle) {
+    const input = document.getElementById(`rename-input-${id}`);
+    const newTitle = input ? input.value.trim() : '';
+    const originalTitle = item.dataset.originalTitle || 'Conversation';
+
+    if (!newTitle || newTitle === originalTitle) {
+        cancelInlineRename(event, id);
         return;
     }
 
@@ -653,15 +725,12 @@ async function triggerRenameChat(event, id) {
                 'Content-Type': 'application/json',
                 'X-CSRFToken': getCsrfToken()
             },
-            body: JSON.stringify({ title: newTitle.trim() })
+            body: JSON.stringify({ title: newTitle })
         });
 
         if (res.ok) {
             const data = await res.json();
-            if (titleSpan) {
-                titleSpan.textContent = data.title;
-                titleSpan.title = data.title;
-            }
+            renderNormalChatItem(item, id, data.title);
             if (activeConversationId === id) {
                 const headerTitle = document.getElementById('currentChatTitle');
                 if (headerTitle) headerTitle.textContent = data.title;
@@ -670,27 +739,75 @@ async function triggerRenameChat(event, id) {
         } else {
             const errData = await res.json().catch(() => ({}));
             alert('Rename failed: ' + (errData.message || res.statusText));
+            cancelInlineRename(event, id);
         }
     } catch (e) {
         alert('Rename failed: ' + e);
+        cancelInlineRename(event, id);
     }
 }
-window.triggerRenameChat = triggerRenameChat;
-window.renameChat = triggerRenameChat;
+window.saveInlineRename = saveInlineRename;
 
-async function triggerDeleteChat(event, id) {
+function cancelInlineRename(event, id) {
     if (event) {
         event.preventDefault();
         event.stopPropagation();
     }
+    const item = document.getElementById(`chat-item-${id}`);
+    if (!item) return;
+    const title = item.dataset.originalTitle || 'Conversation';
+    renderNormalChatItem(item, id, title);
+}
+window.cancelInlineRename = cancelInlineRename;
+
+/* --- Inline Delete (Nearby delete button, no browser prompt) --- */
+
+function startInlineDelete(event, id) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    cancelAllInlineActions();
 
     const item = document.getElementById(`chat-item-${id}`);
-    const titleSpan = item ? item.querySelector('.chat-item-title') : null;
-    const currentTitle = titleSpan ? titleSpan.textContent.trim() : 'this conversation';
+    if (!item) return;
 
-    if (!confirm(`Are you sure you want to delete "${currentTitle}"?`)) {
-        return;
+    const titleSpan = item.querySelector('.chat-item-title');
+    const title = titleSpan ? titleSpan.textContent.trim() : 'Conversation';
+    item.dataset.originalTitle = title;
+
+    item.classList.add('inline-deleting');
+
+    // Replace the actions area with an inline confirmation bar right next to the delete button
+    const actionsArea = item.querySelector('.chat-item-actions');
+    if (actionsArea) {
+        actionsArea.style.display = 'flex';
+        actionsArea.innerHTML = `
+            <div class="chat-item-delete-confirm" onclick="event.stopPropagation()">
+                <span class="delete-confirm-label">Delete?</span>
+                <button type="button" class="btn-inline-action btn-inline-delete" title="Confirm Delete" onclick="confirmInlineDelete(event, '${id}')">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </button>
+                <button type="button" class="btn-inline-action btn-inline-cancel" title="Cancel" onclick="cancelInlineDelete(event, '${id}')">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+        `;
     }
+}
+window.startInlineDelete = startInlineDelete;
+
+async function confirmInlineDelete(event, id) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const item = document.getElementById(`chat-item-${id}`);
 
     try {
         const res = await fetch(`/api/conversations/${id}/delete/`, {
@@ -702,9 +819,7 @@ async function triggerDeleteChat(event, id) {
         });
 
         if (res.ok) {
-            if (item) {
-                item.remove();
-            }
+            if (item) item.remove();
             if (activeConversationId === id) {
                 window.location.href = '/';
             } else {
@@ -720,13 +835,50 @@ async function triggerDeleteChat(event, id) {
         } else {
             const errData = await res.json().catch(() => ({}));
             alert('Delete failed: ' + (errData.message || res.statusText));
+            cancelInlineDelete(event, id);
         }
     } catch (e) {
         alert('Delete failed: ' + e);
+        cancelInlineDelete(event, id);
     }
 }
-window.triggerDeleteChat = triggerDeleteChat;
-window.deleteChat = triggerDeleteChat;
+window.confirmInlineDelete = confirmInlineDelete;
+
+function cancelInlineDelete(event, id) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const item = document.getElementById(`chat-item-${id}`);
+    if (!item) return;
+
+    item.classList.remove('inline-deleting');
+    const titleSpan = item.querySelector('.chat-item-title');
+    const title = titleSpan ? titleSpan.textContent.trim() : (item.dataset.originalTitle || 'Conversation');
+    renderNormalChatItem(item, id, title);
+}
+window.cancelInlineDelete = cancelInlineDelete;
+
+function renderNormalChatItem(item, id, title) {
+    item.classList.remove('inline-editing');
+    item.classList.remove('inline-deleting');
+    item.innerHTML = `
+        <span class="chat-item-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
+        <div class="chat-item-actions">
+            <button type="button" class="btn-icon-sm rename-chat-btn" data-id="${id}" title="Rename" onclick="startInlineRename(event, '${id}')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                </svg>
+            </button>
+            <button type="button" class="btn-icon-sm delete delete-chat-btn" data-id="${id}" title="Delete" onclick="startInlineDelete(event, '${id}')">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+            </button>
+        </div>
+    `;
+}
 
 async function startNewConversation() {
     if (isGenerating) {
@@ -859,23 +1011,8 @@ function addNewChatToSidebar(id, title) {
     item.className = 'chat-item active';
     item.id = `chat-item-${id}`;
     item.style.cursor = 'pointer';
-    item.onclick = () => { window.location.href = `/c/${id}/`; };
-    item.innerHTML = `
-        <span class="chat-item-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
-        <div class="chat-item-actions">
-            <button type="button" class="btn-icon-sm rename-chat-btn" data-id="${id}" title="Rename" onclick="triggerRenameChat(event, '${id}')">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
-                </svg>
-            </button>
-            <button type="button" class="btn-icon-sm delete delete-chat-btn" data-id="${id}" title="Delete" onclick="triggerDeleteChat(event, '${id}')">
-                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"></polyline>
-                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
-                </svg>
-            </button>
-        </div>
-    `;
+    item.onclick = (e) => { handleChatItemClick(e, `/c/${id}/`); };
+    renderNormalChatItem(item, id, title);
 
     // Remove active class from others
     nav.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
