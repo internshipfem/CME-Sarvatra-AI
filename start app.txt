@@ -1,0 +1,74 @@
+================================================================================
+           OLLAMA AIR-GAPPED WEB APP - STARTUP & ENVIRONMENT GUIDE
+================================================================================
+
+--------------------------------------------------------------------------------
+STEP 1: SET POWERSHELL EXECUTION POLICY (ONE-TIME SETUP)
+--------------------------------------------------------------------------------
+If Windows blocks PowerShell script execution (error: "running scripts is disabled 
+on this system"), run the following command in PowerShell:
+
+    Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+
+Alternatively, to bypass execution policy for the current session only:
+
+    Set-ExecutionPolicy -ExecutionPolicy Bypass -Scope Process
+
+Press [Y] or [A] (Yes to All) when prompted to confirm.
+
+
+--------------------------------------------------------------------------------
+STEP 2: ACTIVATE THE VIRTUAL ENVIRONMENT (VENV)
+--------------------------------------------------------------------------------
+
+A) IN POWERSHELL:
+-----------------
+    .\venv\Scripts\Activate.ps1
+
+    (Once activated, you will see "(venv)" at the start of your terminal prompt)
+
+
+B) IN COMMAND PROMPT (CMD):
+---------------------------
+    .\venv\Scripts\activate.bat
+
+
+C) TO DEACTIVATE LATER:
+-----------------------
+    deactivate
+
+
+--------------------------------------------------------------------------------
+STEP 3: RUN THE APPLICATION
+--------------------------------------------------------------------------------
+
+METHOD 1: ONE-CLICK LAUNCHER (RECOMMENDED)
+-----------------------------------------
+Double-click:
+    run_app.bat
+
+(This automatically checks Python 3.7.9, checks Ollama models, runs migrations, 
+opens your browser to http://127.0.0.1:8000, and starts the server).
+
+
+METHOD 2: MANUAL COMMAND LINE
+-----------------------------
+1. Activate the venv (as shown in Step 2).
+2. Start the Django development server:
+
+    python manage.py runserver 127.0.0.1:8000
+
+3. Open your browser and navigate to:
+    http://127.0.0.1:8000
+
+
+--------------------------------------------------------------------------------
+DEFAULT LOGIN CREDENTIALS
+--------------------------------------------------------------------------------
+    Username:     admin
+    Password:     admin
+    Employee ID:  EMP-001 (Admin User)
+
+* Note: You can also register new employee accounts directly at:
+  http://127.0.0.1:8000/register/
+================================================================================

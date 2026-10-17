@@ -1,0 +1,777 @@
+/**
+ * Air-Gapped Ollama ChatGPT Client Application
+ * 100% Self-Contained Offline JavaScript
+ */
+
+let activeConversationId = window.ACTIVE_CONVERSATION_ID || null;
+let stagedFiles = []; // { id, name, size }
+let currentAbortController = null;
+let isGenerating = false;
+
+// Initialize on DOM ready
+document.addEventListener('DOMContentLoaded', () => {
+    initMarkdownAndHighlighting();
+    initExistingMessages();
+    setupTextareaAutoresize();
+    setupDragAndDrop();
+    setupSidebarToggle();
+    setupEventHandlers();
+    scrollToBottom();
+});
+
+/* ==========================================================================
+   Markdown & Code Highlighting Engine
+   ========================================================================== */
+
+function initMarkdownAndHighlighting() {
+    if (typeof marked !== 'undefined') {
+        marked.setOptions({
+            breaks: true,
+            gfm: true,
+            headerIds: false
+        });
+    }
+}
+
+function renderMarkdownText(rawMarkdown) {
+    if (typeof marked === 'undefined') {
+        return escapeHtml(rawMarkdown).replace(/\n/g, '<br>');
+    }
+    const html = marked.parse(rawMarkdown);
+    return enhanceCodeBlocks(html);
+}
+
+function enhanceCodeBlocks(html) {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+
+    tempDiv.querySelectorAll('pre code').forEach((codeBlock) => {
+        const pre = codeBlock.parentElement;
+        const codeText = codeBlock.textContent;
+
+        // Try highlighting with highlight.js if available
+        if (typeof hljs !== 'undefined') {
+            try {
+                hljs.highlightElement(codeBlock);
+            } catch (e) {
+                // Ignore highlight errors
+            }
+        }
+
+        // Get language
+        let lang = 'code';
+        const classes = codeBlock.className.split(' ');
+        for (const c of classes) {
+            if (c.startsWith('language-')) {
+                lang = c.replace('language-', '');
+                break;
+            }
+        }
+
+        // Create sleek wrapper with header & copy button
+        const wrapper = document.createElement('div');
+        wrapper.className = 'code-block-wrapper';
+
+        const header = document.createElement('div');
+        header.className = 'code-header';
+        header.innerHTML = `
+            <span>${escapeHtml(lang)}</span>
+            <button class="btn-copy-code" type="button" title="Copy code to clipboard">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>Copy</span>
+            </button>
+        `;
+
+        const copyBtn = header.querySelector('.btn-copy-code');
+        copyBtn.addEventListener('click', () => {
+            copyToClipboard(codeText, copyBtn);
+        });
+
+        // Insert wrapper
+        pre.parentNode.insertBefore(wrapper, pre);
+        wrapper.appendChild(header);
+        wrapper.appendChild(pre);
+    });
+
+    return tempDiv.innerHTML;
+}
+
+function initExistingMessages() {
+    document.querySelectorAll('.message-bubble.markdown-content').forEach((bubble) => {
+        const raw = bubble.getAttribute('data-raw') || '';
+        const renderedTarget = bubble.querySelector('.rendered-markdown');
+        if (renderedTarget && raw) {
+            renderedTarget.innerHTML = renderMarkdownText(raw);
+        }
+    });
+}
+
+function copyToClipboard(text, buttonElement) {
+    if (navigator.clipboard && window.isSecureContext) {
+        navigator.clipboard.writeText(text).then(() => showCopiedFeedback(buttonElement));
+    } else {
+        // Fallback for non-https or air-gapped intranet
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-999999px';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        try {
+            document.execCommand('copy');
+            showCopiedFeedback(buttonElement);
+        } catch (err) {
+            console.error('Fallback copy failed', err);
+        }
+        document.body.removeChild(ta);
+    }
+}
+
+function showCopiedFeedback(buttonElement) {
+    const originalHtml = buttonElement.innerHTML;
+    buttonElement.innerHTML = `
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+        <span style="color:#10b981; font-weight:600;">Copied!</span>
+    `;
+    setTimeout(() => {
+        buttonElement.innerHTML = originalHtml;
+    }, 2000);
+}
+
+/* ==========================================================================
+   Chat Interactions & Streaming Pipeline
+   ========================================================================== */
+
+async function sendMessage() {
+    if (isGenerating) {
+        stopGeneration();
+        return;
+    }
+
+    const textarea = document.getElementById('chatTextarea');
+    const prompt = textarea.value.trim();
+    const modelSelect = document.getElementById('modelSelect');
+    const selectedModel = modelSelect ? modelSelect.value : 'llama3:latest';
+
+    if (!prompt && stagedFiles.length === 0) {
+        return;
+    }
+
+    // Hide empty state if present
+    const emptyState = document.getElementById('emptyState');
+    if (emptyState) {
+        emptyState.remove();
+    }
+
+    // Auto-create conversation if none is selected
+    if (!activeConversationId) {
+        try {
+            const res = await fetch('/api/conversations/create/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': window.CSRF_TOKEN
+                },
+                body: JSON.stringify({
+                    title: prompt.slice(0, 30) || 'New Chat',
+                    model_name: selectedModel
+                })
+            });
+            const data = await res.json();
+            activeConversationId = data.id;
+            history.pushState(null, '', `/c/${data.id}/`);
+            addNewChatToSidebar(data.id, data.title);
+        } catch (e) {
+            alert('Failed to initialize conversation: ' + e);
+            return;
+        }
+    }
+
+    // Keep snapshot of staged files for this message
+    const currentFiles = [...stagedFiles];
+    stagedFiles = [];
+    renderStagedFiles();
+
+    // Append User Message to UI
+    appendUserMessageToUI(prompt, currentFiles);
+    textarea.value = '';
+    autoResizeTextarea(textarea);
+
+    // Create Assistant Message Placeholder
+    const assistantRow = createAssistantMessagePlaceholder();
+    const bubbleTarget = assistantRow.querySelector('.rendered-markdown');
+    const metricsContainer = assistantRow.querySelector('.message-metrics-bar');
+
+    // UI state: generating
+    setGeneratingState(true);
+    currentAbortController = new AbortController();
+
+    let accumulatedText = '';
+    const fileIds = currentFiles.map(f => f.id);
+
+    try {
+        const response = await fetch(`/api/conversations/${activeConversationId}/send/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': window.CSRF_TOKEN
+            },
+            body: JSON.stringify({
+                prompt: prompt,
+                model_name: selectedModel,
+                file_ids: fileIds
+            }),
+            signal: currentAbortController.signal
+        });
+
+        if (!response.ok) {
+            throw new Error(`Server returned status ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop(); // keep remainder
+
+            for (const line of lines) {
+                const trimmed = line.trim();
+                if (!trimmed || !trimmed.startsWith('data: ')) continue;
+                
+                try {
+                    const payload = JSON.parse(trimmed.slice(6));
+                    
+                    if (payload.chunk) {
+                        accumulatedText += payload.chunk;
+                        bubbleTarget.innerHTML = renderMarkdownText(accumulatedText);
+                        scrollToBottom();
+                    }
+
+                    if (payload.done && payload.metrics) {
+                        displayPerformanceTelemetry(metricsContainer, payload.metrics);
+                    }
+                } catch (jsonErr) {
+                    // Ignore transient chunk parse errors
+                }
+            }
+        }
+
+        // Final render check
+        bubbleTarget.innerHTML = renderMarkdownText(accumulatedText);
+
+    } catch (err) {
+        if (err.name === 'AbortError') {
+            bubbleTarget.innerHTML = renderMarkdownText(accumulatedText + '\n\n*(Generation stopped by user)*');
+        } else {
+            bubbleTarget.innerHTML = renderMarkdownText(accumulatedText + `\n\n**Error:** ${err.message}`);
+        }
+    } finally {
+        setGeneratingState(false);
+        currentAbortController = null;
+        scrollToBottom();
+    }
+}
+
+function stopGeneration() {
+    if (currentAbortController) {
+        currentAbortController.abort();
+    }
+}
+
+function setGeneratingState(generating) {
+    isGenerating = generating;
+    const sendBtn = document.getElementById('btnSend');
+    if (!sendBtn) return;
+
+    if (generating) {
+        sendBtn.classList.add('btn-stop');
+        sendBtn.title = "Stop generation";
+        sendBtn.innerHTML = `
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+                <rect x="6" y="6" width="12" height="12" rx="2"></rect>
+            </svg>
+        `;
+    } else {
+        sendBtn.classList.remove('btn-stop');
+        sendBtn.title = "Send Message";
+        sendBtn.innerHTML = `
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="22" y1="2" x2="11" y2="13"></line>
+                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+            </svg>
+        `;
+    }
+}
+
+/* ==========================================================================
+   UI DOM Helpers
+   ========================================================================== */
+
+function appendUserMessageToUI(content, files) {
+    const wrapper = document.getElementById('messagesWrapper');
+    const row = document.createElement('div');
+    row.className = 'message-row user';
+
+    let attachmentsHtml = '';
+    if (files && files.length > 0) {
+        attachmentsHtml = '<div class="bubble-attachments">';
+        for (const f of files) {
+            attachmentsHtml += `
+                <div class="file-chip">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                    </svg>
+                    <span>${escapeHtml(f.name)}</span>
+                    <span style="color:var(--text-muted)">(${escapeHtml(f.size)})</span>
+                </div>
+            `;
+        }
+        attachmentsHtml += '</div>';
+    }
+
+    row.innerHTML = `
+        <div class="message-avatar">${window.USER_INITIAL || 'U'}</div>
+        <div class="message-content-wrapper">
+            ${attachmentsHtml}
+            <div class="message-bubble">
+                <p style="white-space: pre-wrap;">${escapeHtml(content)}</p>
+            </div>
+        </div>
+    `;
+
+    wrapper.appendChild(row);
+    scrollToBottom();
+}
+
+function createAssistantMessagePlaceholder() {
+    const wrapper = document.getElementById('messagesWrapper');
+    const row = document.createElement('div');
+    row.className = 'message-row assistant';
+
+    row.innerHTML = `
+        <div class="message-avatar">🤖</div>
+        <div class="message-content-wrapper">
+            <div class="message-bubble markdown-content">
+                <div class="rendered-markdown">
+                    <div class="typing-indicator">
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                        <span class="typing-dot"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="message-metrics-bar"></div>
+        </div>
+    `;
+
+    wrapper.appendChild(row);
+    scrollToBottom();
+    return row;
+}
+
+function displayPerformanceTelemetry(container, metrics) {
+    if (!container || !metrics) return;
+
+    let html = '';
+    if (metrics.total_time) {
+        html += `<span class="metric-pill speed" title="Total response generation time">⚡ ${metrics.total_time}s</span>`;
+    }
+    if (metrics.tokens_per_second) {
+        html += `<span class="metric-pill speed" title="Generation speed">🚀 ${metrics.tokens_per_second} tok/s</span>`;
+    }
+    if (metrics.eval_count) {
+        html += `<span class="metric-pill" title="Tokens evaluated">📊 ${metrics.eval_count} tokens</span>`;
+    }
+    if (metrics.load_time) {
+        html += `<span class="metric-pill" title="Model load latency">⏱️ Load: ${metrics.load_time}s</span>`;
+    }
+    if (metrics.model) {
+        html += `<span class="metric-pill model">${escapeHtml(metrics.model)}</span>`;
+    }
+
+    container.innerHTML = html;
+}
+
+/* ==========================================================================
+   File Upload Handling
+   ========================================================================== */
+
+async function handleFileSelect(event) {
+    const files = event.target.files;
+    if (!files || files.length === 0) return;
+
+    for (const file of files) {
+        await uploadSingleFile(file);
+    }
+    event.target.value = ''; // Reset input
+}
+
+async function uploadSingleFile(file) {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (activeConversationId) {
+        formData.append('conversation_id', activeConversationId);
+    }
+
+    // Temporary placeholder badge
+    const tempId = 'temp-' + Date.now();
+    stagedFiles.push({
+        id: tempId,
+        name: file.name,
+        size: 'Uploading...',
+        isUploading: true
+    });
+    renderStagedFiles();
+
+    try {
+        const response = await fetch('/api/upload/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': window.CSRF_TOKEN
+            },
+            body: formData
+        });
+
+        const data = await response.json();
+        if (response.ok) {
+            // Replace placeholder with saved file
+            const idx = stagedFiles.findIndex(f => f.id === tempId);
+            if (idx !== -1) {
+                stagedFiles[idx] = {
+                    id: data.id,
+                    name: data.name,
+                    size: data.size,
+                    charCount: data.char_count
+                };
+            }
+        } else {
+            alert('File upload failed: ' + (data.error || 'Unknown error'));
+            stagedFiles = stagedFiles.filter(f => f.id !== tempId);
+        }
+    } catch (e) {
+        alert('File upload failed: ' + e);
+        stagedFiles = stagedFiles.filter(f => f.id !== tempId);
+    }
+
+    renderStagedFiles();
+}
+
+function renderStagedFiles() {
+    const bar = document.getElementById('stagedFilesBar');
+    if (!bar) return;
+
+    if (stagedFiles.length === 0) {
+        bar.innerHTML = '';
+        return;
+    }
+
+    let html = '';
+    stagedFiles.forEach((f, idx) => {
+        html += `
+            <div class="staged-file-badge">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                </svg>
+                <span>${escapeHtml(f.name)} (${escapeHtml(f.size)})</span>
+                <button type="button" class="btn-remove-staged-file" onclick="removeStagedFile(${idx})" title="Remove attachment">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+        `;
+    });
+
+    bar.innerHTML = html;
+}
+
+function removeStagedFile(index) {
+    stagedFiles.splice(index, 1);
+    renderStagedFiles();
+}
+
+function setupDragAndDrop() {
+    const dropArea = document.querySelector('.chat-workspace');
+    if (!dropArea) return;
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropArea.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropArea.style.border = '2px dashed #3b82f6';
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropArea.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            dropArea.style.border = 'none';
+        }, false);
+    });
+
+    dropArea.addEventListener('drop', (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files && files.length > 0) {
+            for (const file of files) {
+                uploadSingleFile(file);
+            }
+        }
+    });
+}
+
+/* ==========================================================================
+   Conversations & Model Management
+   ========================================================================== */
+
+function setupEventHandlers() {
+    // New chat button
+    const btnNewChat = document.getElementById('btnNewChat');
+    if (btnNewChat) {
+        btnNewChat.addEventListener('click', () => {
+            window.location.href = '/';
+        });
+    }
+
+    // Refresh models button
+    const btnRefreshModels = document.getElementById('btnRefreshModels');
+    if (btnRefreshModels) {
+        btnRefreshModels.addEventListener('click', refreshOllamaModels);
+    }
+
+    // Rename chat buttons
+    document.querySelectorAll('.rename-chat-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const id = btn.getAttribute('data-id');
+            const oldTitle = btn.getAttribute('data-title');
+            renameChat(id, oldTitle);
+        });
+    });
+
+    // Delete chat buttons
+    document.querySelectorAll('.delete-chat-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const id = btn.getAttribute('data-id');
+            deleteChat(id);
+        });
+    });
+}
+
+async function renameChat(id, oldTitle) {
+    const newTitle = prompt('Rename Conversation:', oldTitle);
+    if (!newTitle || newTitle.trim() === '' || newTitle === oldTitle) return;
+
+    try {
+        const res = await fetch(`/api/conversations/${id}/rename/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': window.CSRF_TOKEN
+            },
+            body: JSON.stringify({ title: newTitle.trim() })
+        });
+        if (res.ok) {
+            const data = await res.json();
+            const item = document.getElementById(`chat-item-${id}`);
+            if (item) {
+                const titleLink = item.querySelector('.chat-item-title');
+                if (titleLink) titleLink.textContent = data.title;
+            }
+            if (activeConversationId === id) {
+                const headerTitle = document.getElementById('currentChatTitle');
+                if (headerTitle) headerTitle.textContent = data.title;
+            }
+        }
+    } catch (e) {
+        alert('Rename failed: ' + e);
+    }
+}
+
+async function deleteChat(id) {
+    if (!confirm('Are you sure you want to delete this chat conversation?')) return;
+
+    try {
+        const res = await fetch(`/api/conversations/${id}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': window.CSRF_TOKEN
+            }
+        });
+        if (res.ok) {
+            const item = document.getElementById(`chat-item-${id}`);
+            if (item) item.remove();
+            if (activeConversationId === id) {
+                window.location.href = '/';
+            }
+        }
+    } catch (e) {
+        alert('Delete failed: ' + e);
+    }
+}
+
+async function refreshOllamaModels() {
+    const btn = document.getElementById('btnRefreshModels');
+    if (btn) btn.style.transform = 'rotate(180deg)';
+
+    try {
+        const res = await fetch('/api/models/');
+        const data = await res.json();
+
+        // Update dropdown
+        const select = document.getElementById('modelSelect');
+        const currentVal = select.value;
+        select.innerHTML = '';
+
+        if (data.models && data.models.length > 0) {
+            data.models.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.textContent = m;
+                if (m === currentVal) opt.selected = true;
+                select.appendChild(opt);
+            });
+        } else {
+            const opt = document.createElement('option');
+            opt.value = 'llama3:latest';
+            opt.textContent = 'No models detected';
+            select.appendChild(opt);
+        }
+
+        // Update status badge
+        const badge = document.getElementById('ollamaStatusBadge');
+        const text = document.getElementById('ollamaStatusText');
+        if (badge && text) {
+            if (data.healthy) {
+                badge.className = 'status-indicator status-online';
+                text.textContent = 'Local Online';
+            } else {
+                badge.className = 'status-indicator status-offline';
+                text.textContent = 'Offline';
+            }
+        }
+
+    } catch (e) {
+        console.error('Failed to reload models', e);
+    } finally {
+        if (btn) {
+            setTimeout(() => { btn.style.transform = 'none'; }, 300);
+        }
+    }
+}
+
+function addNewChatToSidebar(id, title) {
+    const nav = document.getElementById('conversationsNav');
+    if (!nav) return;
+
+    const item = document.createElement('div');
+    item.className = 'chat-item active';
+    item.id = `chat-item-${id}`;
+    item.innerHTML = `
+        <a href="/c/${id}/" class="chat-item-title" title="${escapeHtml(title)}">${escapeHtml(title)}</a>
+        <div class="chat-item-actions">
+            <button class="btn-icon-sm rename-chat-btn" data-id="${id}" data-title="${escapeHtml(title)}" title="Rename">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                </svg>
+            </button>
+            <button class="btn-icon-sm delete delete-chat-btn" data-id="${id}" title="Delete">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+            </button>
+        </div>
+    `;
+
+    // Remove active class from others
+    nav.querySelectorAll('.chat-item').forEach(i => i.classList.remove('active'));
+
+    const sectionTitle = nav.querySelector('.nav-section-title');
+    if (sectionTitle && sectionTitle.nextSibling) {
+        nav.insertBefore(item, sectionTitle.nextSibling);
+    } else {
+        nav.appendChild(item);
+    }
+
+    // Attach listener
+    item.querySelector('.rename-chat-btn').addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation(); renameChat(id, title);
+    });
+    item.querySelector('.delete-chat-btn').addEventListener('click', (e) => {
+        e.preventDefault(); e.stopPropagation(); deleteChat(id);
+    });
+}
+
+/* ==========================================================================
+   Utilities
+   ========================================================================== */
+
+function handleTextareaKeydown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendMessage();
+    }
+}
+
+function autoResizeTextarea(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+}
+
+function setPrompt(text) {
+    const ta = document.getElementById('chatTextarea');
+    if (ta) {
+        ta.value = text;
+        autoResizeTextarea(ta);
+        ta.focus();
+    }
+}
+
+function scrollToBottom() {
+    const container = document.getElementById('messagesContainer');
+    if (container) {
+        container.scrollTop = container.scrollHeight;
+    }
+}
+
+function setupSidebarToggle() {
+    const toggleBtn = document.getElementById('sidebarToggle');
+    const sidebar = document.getElementById('sidebar');
+    if (toggleBtn && sidebar) {
+        toggleBtn.addEventListener('click', () => {
+            sidebar.classList.toggle('open');
+        });
+    }
+}
+
+function escapeHtml(text) {
+    if (!text) return '';
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.toString().replace(/[&<>"']/g, m => map[m]);
+}

@@ -1,0 +1,285 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}
+    {% if active_conversation %}{{ active_conversation.title }} - {% endif %}Ollama Workspace
+{% endblock %}
+
+{% block content %}
+<div class="app-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <div class="brand">
+                <a href="{% url 'chat_home' %}" class="brand-title">
+                    <div class="brand-icon">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
+                            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
+                            <line x1="6" y1="6" x2="6.01" y2="6"></line>
+                            <line x1="6" y1="18" x2="6.01" y2="18"></line>
+                        </svg>
+                    </div>
+                    <span>Ollama AI</span>
+                </a>
+                <div class="status-indicator {% if ollama_healthy %}status-online{% else %}status-offline{% endif %}" id="ollamaStatusBadge">
+                    <span class="status-dot"></span>
+                    <span id="ollamaStatusText">{% if ollama_healthy %}Local Online{% else %}Offline{% endif %}</span>
+                </div>
+            </div>
+
+            <button type="button" class="btn-new-chat" id="btnNewChat">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+                <span>New Conversation</span>
+            </button>
+        </div>
+
+        <nav class="conversations-nav" id="conversationsNav">
+            <div class="nav-section-title">Your Conversations</div>
+            {% for c in conversations %}
+                <div class="chat-item {% if active_conversation and active_conversation.id == c.id %}active{% endif %}" id="chat-item-{{ c.id }}">
+                    <a href="{% url 'chat_detail' c.id %}" class="chat-item-title" title="{{ c.title }}">
+                        {{ c.title }}
+                    </a>
+                    <div class="chat-item-actions">
+                        <button class="btn-icon-sm rename-chat-btn" data-id="{{ c.id }}" data-title="{{ c.title }}" title="Rename">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
+                            </svg>
+                        </button>
+                        <button class="btn-icon-sm delete delete-chat-btn" data-id="{{ c.id }}" title="Delete">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="3 6 5 6 21 6"></polyline>
+                                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            {% empty %}
+                <div style="padding: 16px; color: var(--text-muted); font-size: 0.85rem; text-align: center;">
+                    No chats yet. Start a new one!
+                </div>
+            {% endfor %}
+        </nav>
+
+        <div class="sidebar-footer">
+            <div class="user-profile-info">
+                <div class="user-avatar">
+                    {{ request.user.first_name|default:request.user.username|slice:":1"|upper }}
+                </div>
+                <div class="user-details">
+                    <span class="user-name">{{ employee_display }}</span>
+                    <span class="user-emp-id">
+                        {% if employee_id %}ID: {{ employee_id }}{% else %}User: {{ request.user.username }}{% endif %}
+                        {% if department %} • {{ department }}{% endif %}
+                    </span>
+                </div>
+            </div>
+            <a href="{% url 'logout' %}" class="btn-logout" title="Sign Out">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                    <polyline points="16 17 21 12 16 7"></polyline>
+                    <line x1="21" y1="12" x2="9" y2="12"></line>
+                </svg>
+            </a>
+        </div>
+    </aside>
+
+    <!-- Main Chat Workspace -->
+    <main class="chat-workspace">
+        <!-- Top Workspace Bar -->
+        <header class="chat-header">
+            <div class="header-left">
+                <button class="sidebar-toggle-btn" id="sidebarToggle" title="Toggle Sidebar">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                </button>
+
+                <div class="model-selector-wrapper">
+                    <label for="modelSelect">Model</label>
+                    <select id="modelSelect" class="model-dropdown">
+                        {% for m in models %}
+                            <option value="{{ m }}" {% if active_conversation and active_conversation.model_name == m or not active_conversation and m == default_model %}selected{% endif %}>
+                                {{ m }}
+                            </option>
+                        {% empty %}
+                            <option value="llama3:latest">No models detected</option>
+                        {% endfor %}
+                    </select>
+                    <button class="btn-icon-sm" id="btnRefreshModels" title="Reload Installed Models">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <polyline points="1 20 1 14 7 14"></polyline>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <div class="chat-conversation-title" id="currentChatTitle">
+                    {% if active_conversation %}{{ active_conversation.title }}{% else %}New Chat{% endif %}
+                </div>
+            </div>
+        </header>
+
+        <!-- Messages Stream -->
+        <div class="chat-messages-container" id="messagesContainer">
+            <div class="messages-wrapper" id="messagesWrapper">
+                {% if not messages %}
+                    <!-- Empty State Welcome -->
+                    <div class="empty-state" id="emptyState">
+                        <div class="empty-logo">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                            </svg>
+                        </div>
+                        <h2 class="empty-title">Ready when you are.</h2>
+                        <p class="empty-subtitle">
+                            Powered by local Ollama on this air-gapped machine. Ask questions, analyze documents, or review code securely.
+                        </p>
+
+                        <div class="prompt-suggestions">
+                            <div class="suggestion-card" onclick="setPrompt('Analyze the uploaded document and summarize the key findings.')">
+                                <div class="suggestion-title">📄 Document Summary</div>
+                                <div class="suggestion-desc">Upload a file and get structured key takeaways</div>
+                            </div>
+                            <div class="suggestion-card" onclick="setPrompt('Explain how this Python script works and suggest optimizations.')">
+                                <div class="suggestion-title">⚡ Code Review</div>
+                                <div class="suggestion-desc">Inspect code quality, bugs, and performance</div>
+                            </div>
+                            <div class="suggestion-card" onclick="setPrompt('Write a concise technical summary and bullet-point report.')">
+                                <div class="suggestion-title">📝 Technical Writing</div>
+                                <div class="suggestion-desc">Draft reports, documentation, or action items</div>
+                            </div>
+                            <div class="suggestion-card" onclick="setPrompt('What models are currently loaded and what are their strengths?')">
+                                <div class="suggestion-title">🤖 Model Info</div>
+                                <div class="suggestion-desc">Check capabilities of local Ollama models</div>
+                            </div>
+                        </div>
+                    </div>
+                {% endif %}
+
+                {% for msg in messages %}
+                    <div class="message-row {{ msg.role }}">
+                        <div class="message-avatar">
+                            {% if msg.role == 'user' %}
+                                {{ request.user.first_name|default:request.user.username|slice:":1"|upper }}
+                            {% else %}
+                                🤖
+                            {% endif %}
+                        </div>
+                        <div class="message-content-wrapper">
+                            {% if msg.role == 'user' and msg.attached_files.all %}
+                                <div class="bubble-attachments">
+                                    {% for f in msg.attached_files.all %}
+                                        <div class="file-chip">
+                                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                                                <polyline points="14 2 14 8 20 8"></polyline>
+                                            </svg>
+                                            <span>{{ f.original_name }}</span>
+                                            <span style="color:var(--text-muted)">({{ f.format_size }})</span>
+                                        </div>
+                                    {% endfor %}
+                                </div>
+                            {% endif %}
+
+                            <div class="message-bubble {% if msg.role == 'assistant' %}markdown-content{% endif %}" data-raw="{{ msg.content|escapejs }}">
+                                {% if msg.role == 'assistant' %}
+                                    <!-- Rendered dynamically by marked.js on load -->
+                                    <div class="rendered-markdown"></div>
+                                {% else %}
+                                    <p style="white-space: pre-wrap;">{{ msg.content }}</p>
+                                {% endif %}
+                            </div>
+
+                            <!-- Performance / Bottleneck Telemetry -->
+                            {% if msg.role == 'assistant' and msg.response_time %}
+                                <div class="message-metrics-bar">
+                                    <span class="metric-pill speed" title="Total response generation time">
+                                        ⚡ {{ msg.response_time }}s
+                                    </span>
+                                    {% if msg.tokens_per_second %}
+                                        <span class="metric-pill speed" title="Generation speed">
+                                            🚀 {{ msg.tokens_per_second }} tok/s
+                                        </span>
+                                    {% endif %}
+                                    {% if msg.eval_count %}
+                                        <span class="metric-pill" title="Tokens evaluated">
+                                            📊 {{ msg.eval_count }} tokens
+                                        </span>
+                                    {% endif %}
+                                    {% if msg.load_duration %}
+                                        <span class="metric-pill" title="Model load time into memory (Ollama bottleneck)">
+                                            ⏱️ Load: {{ msg.load_duration }}s
+                                        </span>
+                                    {% endif %}
+                                    <span class="metric-pill model">
+                                        {{ active_conversation.model_name }}
+                                    </span>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Chat Input Form & Attached Files Tray -->
+        <div class="chat-input-wrapper">
+            <div class="staged-files-bar" id="stagedFilesBar"></div>
+
+            <form id="chatForm" onsubmit="event.preventDefault(); sendMessage();">
+                {% csrf_token %}
+                <div class="chat-input-box">
+                    <input type="file" id="fileUploadInput" multiple style="display: none;" onchange="handleFileSelect(event)">
+                    
+                    <button type="button" class="btn-attach" id="btnAttach" title="Attach Document or Code File" onclick="document.getElementById('fileUploadInput').click()">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path>
+                        </svg>
+                    </button>
+
+                    <textarea 
+                        id="chatTextarea" 
+                        class="chat-textarea" 
+                        placeholder="Message Ollama... (Shift+Enter for newline)" 
+                        rows="1"
+                        onkeydown="handleTextareaKeydown(event)"
+                        oninput="autoResizeTextarea(this)"
+                    ></textarea>
+
+                    <button type="button" class="btn-send" id="btnSend" onclick="sendMessage()" title="Send Message">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <line x1="22" y1="2" x2="11" y2="13"></line>
+                            <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                        </svg>
+                    </button>
+                </div>
+            </form>
+
+            <div class="input-disclaimer">
+                Air-gapped on-premise AI. All conversations and uploaded files stay strictly local on this machine.
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Current State Meta for JavaScript -->
+<script>
+    window.ACTIVE_CONVERSATION_ID = "{% if active_conversation %}{{ active_conversation.id }}{% else %}{% endif %}";
+    window.CSRF_TOKEN = "{{ csrf_token }}";
+    window.USER_INITIAL = "{{ request.user.first_name|default:request.user.username|slice:':1'|upper }}";
+</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/chat.js' %}"></script>
+{% endblock %}

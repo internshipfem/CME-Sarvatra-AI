@@ -1,0 +1,22 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Ollama Workspace{% endblock %}</title>
+    
+    <!-- 100% Offline Stylesheets (Air-Gapped Ready) -->
+    <link rel="stylesheet" href="{% static 'vendor/highlight-dark.min.css' %}">
+    <link rel="stylesheet" href="{% static 'css/base.css' %}">
+    {% block extra_css %}{% endblock %}
+</head>
+<body class="{% block body_class %}{% endblock %}">
+    {% block content %}{% endblock %}
+
+    <!-- 100% Offline Vendor Scripts (Air-Gapped Ready) -->
+    <script src="{% static 'vendor/marked.min.js' %}"></script>
+    <script src="{% static 'vendor/highlight.min.js' %}"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,82 @@
+{% extends 'base.html' %}
+{% block title %}Register Employee - Ollama Workspace{% endblock %}
+
+{% block content %}
+<div class="auth-wrapper">
+    <div class="auth-card" style="max-width: 480px;">
+        <div class="auth-header">
+            <div class="auth-logo">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <line x1="19" y1="8" x2="19" y2="14"></line>
+                    <line x1="22" y1="11" x2="16" y2="11"></line>
+                </svg>
+            </div>
+            <h1 class="auth-title">Employee Registration</h1>
+            <p class="auth-subtitle">Create your personal Ollama AI account</p>
+        </div>
+
+        {% if form.errors %}
+        <div class="form-errors">
+            {% for field in form %}
+                {% for error in field.errors %}
+                    <p><strong>{{ field.label }}:</strong> {{ error }}</p>
+                {% endfor %}
+            {% endfor %}
+            {% for error in form.non_field_errors %}
+                <p>{{ error }}</p>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <form method="post" class="auth-form">
+            {% csrf_token %}
+            
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="id_first_name">First Name *</label>
+                    {{ form.first_name }}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_last_name">Last Name *</label>
+                    {{ form.last_name }}
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="id_employee_id">Employee ID *</label>
+                    {{ form.employee_id }}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_department">Department</label>
+                    {{ form.department }}
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label" for="id_username">Username *</label>
+                {{ form.username }}
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="id_password">Password *</label>
+                    {{ form.password }}
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="id_confirm_password">Confirm Password *</label>
+                    {{ form.confirm_password }}
+                </div>
+            </div>
+
+            <button type="submit" class="btn-primary" style="margin-top: 6px;">Create Account</button>
+        </form>
+
+        <div class="auth-footer">
+            Already registered? <a href="{% url 'login' %}" class="auth-link">Sign In</a>
+        </div>
+    </div>
+</div>
+{% endblock %}
