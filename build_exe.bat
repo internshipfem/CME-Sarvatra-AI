@@ -36,11 +36,11 @@ if errorlevel 1 (
 )
 
 :: 4. Copy to root directory for easy access
-if exist "dist\OllamaChat.exe" (
+if exist "dist\SarvatraAI.exe" (
     echo.
-    echo [3/3] Copying OllamaChat.exe to current folder...
-    copy /y "dist\OllamaChat.exe" "OllamaChat.exe" >nul
-    echo [OK] Standalone executable ready: OllamaChat.exe
+    echo [3/3] Copying SarvatraAI.exe to current folder...
+    copy /y "dist\SarvatraAI.exe" "SarvatraAI.exe" >nul
+    echo [OK] Standalone executable ready: SarvatraAI.exe
 )
 
 echo.
@@ -49,7 +49,7 @@ echo                     EXE BUILD SUCCESSFUL!
 echo =====================================================================
 echo.
 echo You can now run:
-echo   --^> OllamaChat.exe
+echo   --^> SarvatraAI.exe
 echo.
 echo It is completely self-contained. It will connect to your local Ollama,
 echo run migrations automatically, and open your browser to http://127.0.0.1:8000.

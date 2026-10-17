@@ -2,7 +2,7 @@
 {% load static %}
 
 {% block title %}
-    {% if active_conversation %}{{ active_conversation.title }} - {% endif %}Ollama Workspace
+    {% if active_conversation %}{{ active_conversation.title }} - {% endif %}Sarvatra AI (College of Military Engineering)
 {% endblock %}
 
 {% block content %}
@@ -12,15 +12,8 @@
         <div class="sidebar-header">
             <div class="brand">
                 <a href="{% url 'chat_home' %}" class="brand-title">
-                    <div class="brand-icon">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="2" y="2" width="20" height="8" rx="2" ry="2"></rect>
-                            <rect x="2" y="14" width="20" height="8" rx="2" ry="2"></rect>
-                            <line x1="6" y1="6" x2="6.01" y2="6"></line>
-                            <line x1="6" y1="18" x2="6.01" y2="18"></line>
-                        </svg>
-                    </div>
-                    <span>Ollama AI</span>
+                    <img src="{% static 'img/CME_logo.png' %}" alt="CME Logo" style="width: 30px; height: 30px; object-fit: contain;">
+                    <span>Sarvatra AI</span>
                 </a>
                 <div class="status-indicator {% if ollama_healthy %}status-online{% else %}status-offline{% endif %}" id="ollamaStatusBadge">
                     <span class="status-dot"></span>
@@ -134,33 +127,34 @@
             <div class="messages-wrapper" id="messagesWrapper">
                 {% if not messages %}
                     <!-- Empty State Welcome -->
-                    <div class="empty-state" id="emptyState">
-                        <div class="empty-logo">
-                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
-                            </svg>
+                    <div class="empty-state" id="emptyState" style="height: auto; padding: 28px 16px 20px 16px;">
+                        <div class="empty-logo" style="background: transparent; box-shadow: none; width: 90px; height: 90px;">
+                            <img src="{% static 'img/CME_logo.png' %}" alt="CME Logo" style="width: 100%; height: 100%; object-fit: contain; filter: drop-shadow(0 4px 10px rgba(0, 0, 0, 0.4));">
                         </div>
-                        <h2 class="empty-title">Ready when you are.</h2>
-                        <p class="empty-subtitle">
-                            Powered by local Ollama on this air-gapped machine. Ask questions, analyze documents, or review code securely.
+                        <h2 class="empty-title" style="font-size: 1.6rem; margin-top: 4px;">College of Military Engineering</h2>
+                        <div style="display: inline-flex; align-items: center; gap: 8px; background: rgba(59, 130, 246, 0.12); border: 1px solid rgba(59, 130, 246, 0.3); padding: 4px 14px; border-radius: 9999px; font-size: 0.8rem; color: #93c5fd; font-weight: 600; letter-spacing: 0.04em;">
+                            SARVATRA AI • CORPS OF ENGINEERS • DAPODI, PUNE
+                        </div>
+                        <p class="empty-subtitle" style="max-width: 680px; font-size: 0.92rem; line-height: 1.6; color: var(--text-secondary); margin-top: 6px;">
+                            Established to train the Indian Army Corps of Engineers, other arms, and friendly foreign nations, <strong>CME Pune</strong> is the premier defense institution of technical excellence for Combat Engineering, Military Works, CBRN Defense, and Geospatial Technology. This sovereign air-gapped system provides secure, local AI assistance for engineering and tactical operations.
                         </p>
 
-                        <div class="prompt-suggestions">
-                            <div class="suggestion-card" onclick="setPrompt('Analyze the uploaded document and summarize the key findings.')">
-                                <div class="suggestion-title">📄 Document Summary</div>
-                                <div class="suggestion-desc">Upload a file and get structured key takeaways</div>
+                        <div class="prompt-suggestions" style="margin-top: 14px;">
+                            <div class="suggestion-card" onclick="setPrompt('Explain the doctrine and tactical considerations for obstacle crossing and field bridging in combat engineering.')">
+                                <div class="suggestion-title">⚔️ Combat & Field Engineering</div>
+                                <div class="suggestion-desc">Tactical bridging, mine breaching, and obstacle clearance doctrines</div>
                             </div>
-                            <div class="suggestion-card" onclick="setPrompt('Explain how this Python script works and suggest optimizations.')">
-                                <div class="suggestion-title">⚡ Code Review</div>
-                                <div class="suggestion-desc">Inspect code quality, bugs, and performance</div>
+                            <div class="suggestion-card" onclick="setPrompt('What are the key technical standards and structural requirements for defensive field fortifications and forward infrastructure?')">
+                                <div class="suggestion-title">🏗️ Infrastructure & MES Works</div>
+                                <div class="suggestion-desc">Permanent defenses, forward airfields, and military engineering works</div>
                             </div>
-                            <div class="suggestion-card" onclick="setPrompt('Write a concise technical summary and bullet-point report.')">
-                                <div class="suggestion-title">📝 Technical Writing</div>
-                                <div class="suggestion-desc">Draft reports, documentation, or action items</div>
+                            <div class="suggestion-card" onclick="setPrompt('Outline standard operational procedures and equipment specifications for CBRN defense and reconnaissance.')">
+                                <div class="suggestion-title">🛡️ CBRN Protection & Defense</div>
+                                <div class="suggestion-desc">Chemical, biological, radiological defense protocols and detection</div>
                             </div>
-                            <div class="suggestion-card" onclick="setPrompt('What models are currently loaded and what are their strengths?')">
-                                <div class="suggestion-title">🤖 Model Info</div>
-                                <div class="suggestion-desc">Check capabilities of local Ollama models</div>
+                            <div class="suggestion-card" onclick="setPrompt('Structure a comprehensive technical military engineering appreciation for a corps-level river crossing operation.')">
+                                <div class="suggestion-title">📋 Staff Papers & Technical Briefs</div>
+                                <div class="suggestion-desc">Engineering appreciations, resource calculations, and technical briefs</div>
                             </div>
                         </div>
                     </div>
@@ -250,7 +244,7 @@
                     <textarea 
                         id="chatTextarea" 
                         class="chat-textarea" 
-                        placeholder="Message Ollama... (Shift+Enter for newline)" 
+                        placeholder="Message Sarvatra AI... (Shift+Enter for newline)" 
                         rows="1"
                         onkeydown="handleTextareaKeydown(event)"
                         oninput="autoResizeTextarea(this)"
@@ -266,7 +260,7 @@
             </form>
 
             <div class="input-disclaimer">
-                Air-gapped on-premise AI. All conversations and uploaded files stay strictly local on this machine.
+                Air-gapped on-premise AI • College of Military Engineering • All operational data remains strictly on this machine.
             </div>
         </div>
     </main>

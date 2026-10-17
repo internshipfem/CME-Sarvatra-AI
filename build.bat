@@ -33,13 +33,13 @@ if errorlevel 1 (
 )
 echo.
 
-:: 3. Build standalone OllamaChat.exe with PyInstaller
-echo [3/4] Building standalone OllamaChat.exe with PyInstaller...
+:: 3. Build standalone SarvatraAI.exe with PyInstaller
+echo [3/4] Building standalone SarvatraAI.exe with PyInstaller...
 if exist "venv\Scripts\pyinstaller.exe" (
     venv\Scripts\pyinstaller OllamaChat.spec --clean --noconfirm
-    if exist "dist\OllamaChat.exe" (
-        copy /y "dist\OllamaChat.exe" "OllamaChat.exe" >nul
-        echo [OK] Successfully built: OllamaChat.exe
+    if exist "dist\SarvatraAI.exe" (
+        copy /y "dist\SarvatraAI.exe" "SarvatraAI.exe" >nul
+        echo [OK] Successfully built: SarvatraAI.exe
     )
 ) else (
     echo [WARNING] PyInstaller not found in venv. Skipping .exe build (run build_exe.bat to install PyInstaller).
@@ -67,13 +67,13 @@ echo =====================================================================
 echo.
 echo The following release artifacts have been generated:
 echo   1. Standalone Executable:
-echo      --^> OllamaChat.exe (Portable - No Python required on target PC)
+echo      --^> SarvatraAI.exe (Portable - No Python required on target PC)
 echo.
 echo   2. Source & Offline Wheels Bundle:
 echo      --^> Ollama_Chat_AirGapped_Bundle.zip
 echo.
 echo Deployment options for your Air-Gapped machine:
-echo   Option A (Fastest): Just copy 'OllamaChat.exe' and double-click it.
+echo   Option A (Fastest): Just copy 'SarvatraAI.exe' and double-click it.
 echo   Option B (Python): Copy the ZIP, extract, and run 'install.bat'.
 echo.
 echo =====================================================================

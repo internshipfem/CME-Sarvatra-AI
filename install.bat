@@ -1,9 +1,9 @@
 @echo off
-title Ollama Workspace - Air-Gapped Installer
+title Sarvatra AI - Offline Air-Gapped Installer (CME Pune)
 color 0A
 
 echo =====================================================================
-echo           Ollama Workspace - Offline Air-Gapped Installer
+echo    Sarvatra AI - College of Military Engineering, Pune (Installer)
 echo =====================================================================
 echo.
 

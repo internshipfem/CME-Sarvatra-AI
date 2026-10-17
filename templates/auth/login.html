@@ -1,20 +1,16 @@
 {% extends 'base.html' %}
-{% block title %}Sign In - Ollama Workspace{% endblock %}
+{% load static %}
+{% block title %}Sign In - Sarvatra AI (College of Military Engineering){% endblock %}
 
 {% block content %}
 <div class="auth-wrapper">
     <div class="auth-card">
         <div class="auth-header">
-            <div class="auth-logo">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M12 2a10 10 0 0 1 10 10c0 5.523-4.477 10-10 10a10 10 0 0 1-10-10c0-5.523 4.477-10 10-10z"></path>
-                    <circle cx="9" cy="10" r="1.5" fill="currentColor"></circle>
-                    <circle cx="15" cy="10" r="1.5" fill="currentColor"></circle>
-                    <path d="M8 15h8"></path>
-                </svg>
+            <div class="auth-logo" style="background: transparent; box-shadow: none; width: 72px; height: 72px;">
+                <img src="{% static 'img/CME_logo.png' %}" alt="CME Logo" style="width: 100%; height: 100%; object-fit: contain;">
             </div>
-            <h1 class="auth-title">Ollama Workspace</h1>
-            <p class="auth-subtitle">Air-Gapped Private AI Environment</p>
+            <h1 class="auth-title">Sarvatra AI</h1>
+            <p class="auth-subtitle">College of Military Engineering, Pune<br><span style="font-size: 0.78rem; opacity: 0.85;">Air-Gapped Sovereign AI System</span></p>
         </div>
 
         {% if form.errors %}

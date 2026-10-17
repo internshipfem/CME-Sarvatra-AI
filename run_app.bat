@@ -1,9 +1,9 @@
 @echo off
-title Ollama Air-Gapped AI Workspace
+title Sarvatra AI - College of Military Engineering
 color 0B
 
 echo =====================================================================
-echo                Ollama Air-Gapped AI Workspace (Windows)
+echo       Sarvatra AI - College of Military Engineering, Pune
 echo =====================================================================
 echo.
 

@@ -21,7 +21,7 @@ def open_browser():
 
 def main():
     print("=" * 65)
-    print("         Ollama AI Workspace - Standalone Windows App")
+    print("     Sarvatra AI - College of Military Engineering, Pune")
     print("=" * 65)
     print("\n[*] Verifying database and admin account...")
     try:
@@ -36,7 +36,7 @@ def main():
     try:
         call_command('runserver', '127.0.0.1:8000', use_reloader=False)
     except KeyboardInterrupt:
-        print("\nExiting Ollama Workspace.")
+        print("\nExiting Sarvatra AI.")
 
 
 if __name__ == '__main__':

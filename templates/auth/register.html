@@ -1,20 +1,16 @@
 {% extends 'base.html' %}
-{% block title %}Register Employee - Ollama Workspace{% endblock %}
+{% load static %}
+{% block title %}Register - Sarvatra AI (College of Military Engineering){% endblock %}
 
 {% block content %}
 <div class="auth-wrapper">
     <div class="auth-card" style="max-width: 480px;">
         <div class="auth-header">
-            <div class="auth-logo">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
-                    <circle cx="9" cy="7" r="4"></circle>
-                    <line x1="19" y1="8" x2="19" y2="14"></line>
-                    <line x1="22" y1="11" x2="16" y2="11"></line>
-                </svg>
+            <div class="auth-logo" style="background: transparent; box-shadow: none; width: 68px; height: 68px;">
+                <img src="{% static 'img/CME_logo.png' %}" alt="CME Logo" style="width: 100%; height: 100%; object-fit: contain;">
             </div>
-            <h1 class="auth-title">Employee Registration</h1>
-            <p class="auth-subtitle">Create your personal Ollama AI account</p>
+            <h1 class="auth-title">Sarvatra AI</h1>
+            <p class="auth-subtitle">College of Military Engineering, Pune<br><span style="font-size: 0.78rem; opacity: 0.85;">User Registration</span></p>
         </div>
 
         {% if form.errors %}
