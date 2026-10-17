@@ -8,6 +8,33 @@ let stagedFiles = []; // { id, name, size }
 let currentAbortController = null;
 let isGenerating = false;
 
+// Helper to retrieve CSRF token from window or cookies
+function getCsrfToken() {
+    if (window.CSRF_TOKEN && window.CSRF_TOKEN.length > 0) {
+        return window.CSRF_TOKEN;
+    }
+    const name = 'csrftoken';
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue || '';
+}
+
+function setupTextareaAutoresize() {
+    const ta = document.getElementById('chatTextarea');
+    if (ta) {
+        autoResizeTextarea(ta);
+    }
+}
+
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
     initMarkdownAndHighlighting();
@@ -190,7 +217,7 @@ async function sendMessage() {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
-                    'X-CSRFToken': window.CSRF_TOKEN
+                    'X-CSRFToken': getCsrfToken()
                 },
                 body: JSON.stringify({
                     title: prompt.slice(0, 30) || 'New Conversation',
@@ -252,7 +279,7 @@ async function sendMessage() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': window.CSRF_TOKEN
+                'X-CSRFToken': getCsrfToken()
             },
             body: JSON.stringify({
                 prompt: prompt,
@@ -472,7 +499,7 @@ async function uploadSingleFile(file) {
         const response = await fetch('/api/upload/', {
             method: 'POST',
             headers: {
-                'X-CSRFToken': window.CSRF_TOKEN
+                'X-CSRFToken': getCsrfToken()
             },
             body: formData
         });
@@ -588,79 +615,118 @@ function setupEventHandlers() {
         btnRefreshModels.addEventListener('click', refreshOllamaModels);
     }
 
-    // Rename chat buttons
+    // Rename chat buttons (fallback listener)
     document.querySelectorAll('.rename-chat-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
             const id = btn.getAttribute('data-id');
-            const oldTitle = btn.getAttribute('data-title');
-            renameChat(id, oldTitle);
+            if (id) triggerRenameChat(e, id);
         });
     });
 
-    // Delete chat buttons
+    // Delete chat buttons (fallback listener)
     document.querySelectorAll('.delete-chat-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
             const id = btn.getAttribute('data-id');
-            deleteChat(id);
+            if (id) triggerDeleteChat(e, id);
         });
     });
 }
 
-async function renameChat(id, oldTitle) {
-    const newTitle = prompt('Rename Conversation:', oldTitle);
-    if (!newTitle || newTitle.trim() === '' || newTitle === oldTitle) return;
+async function triggerRenameChat(event, id) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const item = document.getElementById(`chat-item-${id}`);
+    const titleSpan = item ? item.querySelector('.chat-item-title') : null;
+    const currentTitle = titleSpan ? titleSpan.textContent.trim() : 'Conversation';
+
+    const newTitle = prompt('Rename Conversation:', currentTitle);
+    if (!newTitle || newTitle.trim() === '' || newTitle.trim() === currentTitle) {
+        return;
+    }
 
     try {
         const res = await fetch(`/api/conversations/${id}/rename/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': window.CSRF_TOKEN
+                'X-CSRFToken': getCsrfToken()
             },
             body: JSON.stringify({ title: newTitle.trim() })
         });
+
         if (res.ok) {
             const data = await res.json();
-            const item = document.getElementById(`chat-item-${id}`);
-            if (item) {
-                const titleLink = item.querySelector('.chat-item-title');
-                if (titleLink) titleLink.textContent = data.title;
+            if (titleSpan) {
+                titleSpan.textContent = data.title;
+                titleSpan.title = data.title;
             }
             if (activeConversationId === id) {
                 const headerTitle = document.getElementById('currentChatTitle');
                 if (headerTitle) headerTitle.textContent = data.title;
+                document.title = `${data.title} - Sarvatra AI`;
             }
+        } else {
+            const errData = await res.json().catch(() => ({}));
+            alert('Rename failed: ' + (errData.message || res.statusText));
         }
     } catch (e) {
         alert('Rename failed: ' + e);
     }
 }
+window.triggerRenameChat = triggerRenameChat;
+window.renameChat = triggerRenameChat;
 
-async function deleteChat(id) {
-    if (!confirm('Are you sure you want to delete this chat conversation?')) return;
+async function triggerDeleteChat(event, id) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+
+    const item = document.getElementById(`chat-item-${id}`);
+    const titleSpan = item ? item.querySelector('.chat-item-title') : null;
+    const currentTitle = titleSpan ? titleSpan.textContent.trim() : 'this conversation';
+
+    if (!confirm(`Are you sure you want to delete "${currentTitle}"?`)) {
+        return;
+    }
 
     try {
         const res = await fetch(`/api/conversations/${id}/delete/`, {
             method: 'POST',
             headers: {
-                'X-CSRFToken': window.CSRF_TOKEN
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
             }
         });
+
         if (res.ok) {
-            const item = document.getElementById(`chat-item-${id}`);
-            if (item) item.remove();
+            if (item) {
+                item.remove();
+            }
             if (activeConversationId === id) {
                 window.location.href = '/';
+            } else {
+                const nav = document.getElementById('conversationsNav');
+                if (nav && nav.querySelectorAll('.chat-item').length === 0) {
+                    const notice = document.createElement('div');
+                    notice.className = 'no-chats-notice';
+                    notice.style.cssText = 'padding: 16px; color: var(--text-muted); font-size: 0.85rem; text-align: center;';
+                    notice.textContent = 'No chats yet. Start a new one!';
+                    nav.appendChild(notice);
+                }
             }
+        } else {
+            const errData = await res.json().catch(() => ({}));
+            alert('Delete failed: ' + (errData.message || res.statusText));
         }
     } catch (e) {
         alert('Delete failed: ' + e);
     }
 }
+window.triggerDeleteChat = triggerDeleteChat;
+window.deleteChat = triggerDeleteChat;
 
 async function startNewConversation() {
     if (isGenerating) {
@@ -700,7 +766,7 @@ async function startNewConversation() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'X-CSRFToken': window.CSRF_TOKEN
+                'X-CSRFToken': getCsrfToken()
             },
             body: JSON.stringify({
                 title: 'New Conversation',
@@ -797,12 +863,12 @@ function addNewChatToSidebar(id, title) {
     item.innerHTML = `
         <span class="chat-item-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
         <div class="chat-item-actions">
-            <button class="btn-icon-sm rename-chat-btn" data-id="${id}" data-title="${escapeHtml(title)}" title="Rename" onclick="event.stopPropagation()">
+            <button type="button" class="btn-icon-sm rename-chat-btn" data-id="${id}" title="Rename" onclick="triggerRenameChat(event, '${id}')">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                 </svg>
             </button>
-            <button class="btn-icon-sm delete delete-chat-btn" data-id="${id}" title="Delete" onclick="event.stopPropagation()">
+            <button type="button" class="btn-icon-sm delete delete-chat-btn" data-id="${id}" title="Delete" onclick="triggerDeleteChat(event, '${id}')">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="3 6 5 6 21 6"></polyline>
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
@@ -820,14 +886,6 @@ function addNewChatToSidebar(id, title) {
     } else {
         nav.appendChild(item);
     }
-
-    // Attach listener
-    item.querySelector('.rename-chat-btn').addEventListener('click', (e) => {
-        e.preventDefault(); e.stopPropagation(); renameChat(id, title);
-    });
-    item.querySelector('.delete-chat-btn').addEventListener('click', (e) => {
-        e.preventDefault(); e.stopPropagation(); deleteChat(id);
-    });
 }
 
 /* ==========================================================================

@@ -155,11 +155,16 @@ def create_conversation(request):
 def rename_conversation(request, conversation_id):
     conv = get_object_or_404(Conversation, id=conversation_id, user=request.user)
     try:
-        data = json.loads(request.body.decode('utf-8'))
-        new_title = data.get('title', '').strip()
+        new_title = ''
+        try:
+            data = json.loads(request.body.decode('utf-8'))
+            new_title = data.get('title', '').strip()
+        except Exception:
+            new_title = request.POST.get('title', '').strip()
+
         if new_title:
             conv.title = new_title[:255]
-            conv.save()
+            conv.save(update_fields=['title'])
             return JsonResponse({'status': 'ok', 'title': conv.title})
         return JsonResponse({'status': 'error', 'message': 'Title cannot be empty'}, status=400)
     except Exception as e:
