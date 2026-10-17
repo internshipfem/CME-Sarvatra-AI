@@ -513,6 +513,7 @@ async function uploadSingleFile(file) {
                     id: data.id,
                     name: data.name,
                     size: data.size,
+                    preview: data.preview,
                     charCount: data.char_count
                 };
             }
@@ -539,13 +540,25 @@ function renderStagedFiles() {
 
     let html = '';
     stagedFiles.forEach((f, idx) => {
+        let statusBadge = '';
+        if (f.isUploading) {
+            statusBadge = '<span style="color:var(--text-muted); font-size:0.75rem;">Uploading...</span>';
+        } else if (f.charCount > 0) {
+            statusBadge = `<span style="color:#10b981; font-size:0.75rem; font-weight:600;">✓ ${f.charCount.toLocaleString()} chars</span>`;
+        } else {
+            statusBadge = '<span style="color:#f59e0b; font-size:0.75rem;" title="No selectable text found (image scan)">⚠️ 0 text chars</span>';
+        }
+
+        const tooltip = f.preview ? `Extracted preview:\n${f.preview}` : f.name;
+
         html += `
-            <div class="staged-file-badge">
+            <div class="staged-file-badge" title="${escapeHtml(tooltip)}">
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
                     <polyline points="14 2 14 8 20 8"></polyline>
                 </svg>
                 <span>${escapeHtml(f.name)} (${escapeHtml(f.size)})</span>
+                ${statusBadge}
                 <button type="button" class="btn-remove-staged-file" onclick="removeStagedFile(${idx})" title="Remove attachment">
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <line x1="18" y1="6" x2="6" y2="18"></line>

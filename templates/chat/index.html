@@ -230,7 +230,7 @@
             <form id="chatForm" onsubmit="event.preventDefault(); sendMessage();">
                 {% csrf_token %}
                 <div class="chat-input-box">
-                    <input type="file" id="fileUploadInput" multiple style="display: none;" onchange="handleFileSelect(event)">
+                    <input type="file" id="fileUploadInput" multiple accept=".txt,.doc,.docx,.pdf,.md,.markdown,.csv,.tsv,.json,.xml,.yaml,.yml,.log,.py,.c,.cpp,.h,.java,.sql" style="display: none;" onchange="handleFileSelect(event)">
                     
                     <button type="button" class="btn-attach" id="btnAttach" title="Attach Document or Code File" onclick="document.getElementById('fileUploadInput').click()">
                         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

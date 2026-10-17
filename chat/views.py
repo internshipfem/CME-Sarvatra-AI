@@ -256,15 +256,16 @@ def send_message_stream(request, conversation_id):
     user_msg = Message.objects.create(
         conversation=conv,
         role='user',
-        content=prompt
+        content=prompt or (f"Analyze attached document: {attached_files[0].original_name}" if attached_files else "")
     )
     if attached_files:
         user_msg.attached_files.set(attached_files)
 
     # Auto-generate title if this is the first user message
     if conv.title in ['New Chat', 'New Conversation'] or conv.messages.filter(role='user').count() == 1:
-        auto_title = prompt.split('\n')[0][:35]
-        if len(prompt) > 35:
+        title_source = prompt or (attached_files[0].original_name if attached_files else "New Conversation")
+        auto_title = title_source.split('\n')[0][:35]
+        if len(title_source) > 35:
             auto_title += '...'
         conv.title = auto_title
         conv.save(update_fields=['title'])
@@ -279,7 +280,15 @@ def send_message_stream(request, conversation_id):
     final_user_content = prompt
     if file_context_texts:
         docs_block = "\n\n".join(file_context_texts)
-        final_user_content = f"{docs_block}\n\nUser Question/Instruction:\n{prompt}"
+        effective_prompt = prompt or "Please thoroughly analyze the attached document(s), summarize the key contents, and answer any specific points."
+        final_user_content = (
+            f"[ATTACHED DOCUMENTS CONTENT]\n"
+            f"The following text has been extracted from the user's uploaded document(s). "
+            f"Analyze and use this provided text to answer the user request:\n\n"
+            f"{docs_block}\n\n"
+            f"[END OF ATTACHED DOCUMENTS]\n\n"
+            f"User Question / Instruction:\n{effective_prompt}"
+        )
 
     ollama_history.append({'role': 'user', 'content': final_user_content})
 
