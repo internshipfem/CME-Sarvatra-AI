@@ -1230,14 +1230,15 @@ function updateSidebarUIState(isOpen) {
         if (toggleIcon) {
             toggleIcon.innerHTML = `
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                    <line x1="9" y1="3" x2="9" y2="21"></line>
-                    <polyline points="14 9 11 12 14 15"></polyline>
+                    <line x1="3" y1="12" x2="21" y2="12"></line>
+                    <line x1="3" y1="6" x2="21" y2="6"></line>
+                    <line x1="3" y1="18" x2="21" y2="18"></line>
                 </svg>
             `;
         }
         if (toggleText) {
-            toggleText.style.display = 'none';
+            toggleText.style.display = 'inline';
+            toggleText.textContent = 'Sidebar';
         }
         if (floatingTab) {
             floatingTab.style.display = 'none';
@@ -1246,17 +1247,22 @@ function updateSidebarUIState(isOpen) {
 }
 
 function initSidebarState() {
-    const isMobile = window.innerWidth <= 768;
+    // Clear any previous auto-collapsed state so the user is never trapped
+    localStorage.removeItem('sarvatra_sidebar_collapsed');
+
     const sidebar = document.getElementById('sidebar');
     if (!sidebar) return;
 
-    if (isMobile) {
+    if (window.innerWidth <= 768) {
+        // On mobile, start drawer closed
         sidebar.classList.remove('collapsed');
         sidebar.classList.remove('open');
         updateSidebarUIState(false);
     } else {
-        const isCollapsed = localStorage.getItem('sarvatra_sidebar_collapsed') === 'true';
-        updateSidebarUIState(!isCollapsed);
+        // On desktop, ALWAYS start sidebar OPEN on page reload!
+        sidebar.classList.remove('collapsed');
+        sidebar.classList.remove('open');
+        updateSidebarUIState(true);
     }
 }
 
@@ -1280,9 +1286,8 @@ function toggleSidebarCollapse(event) {
         sidebar.classList.remove('open');
         if (backdrop) backdrop.classList.remove('active');
         const currentlyCollapsed = sidebar.classList.contains('collapsed');
-        const newCollapsed = !currentlyCollapsed;
-        localStorage.setItem('sarvatra_sidebar_collapsed', newCollapsed ? 'true' : 'false');
-        updateSidebarUIState(!newCollapsed);
+        const shouldBeOpen = currentlyCollapsed; // if currently collapsed, we open it
+        updateSidebarUIState(shouldBeOpen);
     }
 }
 window.toggleSidebarCollapse = toggleSidebarCollapse;
