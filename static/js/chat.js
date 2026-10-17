@@ -17,6 +17,10 @@ document.addEventListener('DOMContentLoaded', () => {
     setupSidebarToggle();
     setupEventHandlers();
     scrollToBottom();
+
+    // Auto-focus chat input
+    const textarea = document.getElementById('chatTextarea');
+    if (textarea) textarea.focus();
 });
 
 /* ==========================================================================
@@ -189,8 +193,9 @@ async function sendMessage() {
                     'X-CSRFToken': window.CSRF_TOKEN
                 },
                 body: JSON.stringify({
-                    title: prompt.slice(0, 30) || 'New Chat',
-                    model_name: selectedModel
+                    title: prompt.slice(0, 30) || 'New Conversation',
+                    model_name: selectedModel,
+                    force: true
                 })
             });
             const data = await res.json();
@@ -200,6 +205,23 @@ async function sendMessage() {
         } catch (e) {
             alert('Failed to initialize conversation: ' + e);
             return;
+        }
+    }
+
+    // Update local header and sidebar title if it's currently a placeholder
+    const currentHeader = document.getElementById('currentChatTitle');
+    if (currentHeader && (currentHeader.textContent.trim() === 'New Chat' || currentHeader.textContent.trim() === 'New Conversation')) {
+        const newTitle = prompt.split('\n')[0].slice(0, 35) + (prompt.length > 35 ? '...' : '');
+        currentHeader.textContent = newTitle;
+        if (activeConversationId) {
+            const sideItem = document.getElementById(`chat-item-${activeConversationId}`);
+            if (sideItem) {
+                const titleSpan = sideItem.querySelector('.chat-item-title');
+                if (titleSpan) {
+                    titleSpan.textContent = newTitle;
+                    titleSpan.title = newTitle;
+                }
+            }
         }
     }
 
@@ -554,8 +576,9 @@ function setupEventHandlers() {
     // New chat button
     const btnNewChat = document.getElementById('btnNewChat');
     if (btnNewChat) {
-        btnNewChat.addEventListener('click', () => {
-            window.location.href = '/';
+        btnNewChat.addEventListener('click', (e) => {
+            e.preventDefault();
+            startNewConversation();
         });
     }
 
@@ -639,6 +662,73 @@ async function deleteChat(id) {
     }
 }
 
+async function startNewConversation() {
+    if (isGenerating) {
+        stopGeneration();
+    }
+
+    // Reset any staged attachments
+    stagedFiles = [];
+    renderStagedFiles();
+
+    const btnNewChat = document.getElementById('btnNewChat');
+    if (btnNewChat) {
+        btnNewChat.style.opacity = '0.6';
+        btnNewChat.style.pointerEvents = 'none';
+    }
+
+    // Check if we are already in an empty conversation (no messages)
+    const existingMessages = document.querySelectorAll('.message-row');
+    if (activeConversationId && existingMessages.length === 0) {
+        const ta = document.getElementById('chatTextarea');
+        if (ta) {
+            ta.value = '';
+            ta.focus();
+        }
+        if (btnNewChat) {
+            btnNewChat.style.opacity = '1';
+            btnNewChat.style.pointerEvents = 'auto';
+        }
+        return;
+    }
+
+    const modelSelect = document.getElementById('modelSelect');
+    const selectedModel = modelSelect ? modelSelect.value : 'llama3:latest';
+
+    try {
+        const res = await fetch('/api/conversations/create/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': window.CSRF_TOKEN
+            },
+            body: JSON.stringify({
+                title: 'New Conversation',
+                model_name: selectedModel
+            })
+        });
+
+        if (res.ok) {
+            const data = await res.json();
+            if (data && data.id) {
+                window.location.href = `/c/${data.id}/`;
+                return;
+            }
+        }
+    } catch (e) {
+        console.error('Error creating conversation:', e);
+    } finally {
+        if (btnNewChat) {
+            btnNewChat.style.opacity = '1';
+            btnNewChat.style.pointerEvents = 'auto';
+        }
+    }
+
+    // Fallback: navigate to home
+    window.location.href = '/';
+}
+window.startNewConversation = startNewConversation;
+
 async function refreshOllamaModels() {
     const btn = document.getElementById('btnRefreshModels');
     if (btn) btn.style.transform = 'rotate(180deg)';
@@ -692,6 +782,12 @@ async function refreshOllamaModels() {
 function addNewChatToSidebar(id, title) {
     const nav = document.getElementById('conversationsNav');
     if (!nav) return;
+
+    // Remove empty notice if present
+    const emptyNotice = nav.querySelector('.no-chats-notice');
+    if (emptyNotice) {
+        emptyNotice.remove();
+    }
 
     const item = document.createElement('div');
     item.className = 'chat-item active';

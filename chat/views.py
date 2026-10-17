@@ -122,12 +122,26 @@ def create_conversation(request):
         models = ollama_client.get_installed_models()
         model_name = models[0] if models else 'llama3:latest'
 
-    title = data.get('title', 'New Chat')
-    conv = Conversation.objects.create(
-        user=request.user,
-        title=title,
-        model_name=model_name
-    )
+    title = data.get('title', 'New Conversation')
+    force = data.get('force', False)
+    conv = None
+    if not force:
+        conv = Conversation.objects.filter(
+            user=request.user,
+            messages__isnull=True
+        ).order_by('-created_at').first()
+
+    if conv:
+        if model_name and conv.model_name != model_name:
+            conv.model_name = model_name
+            conv.save(update_fields=['model_name'])
+    else:
+        conv = Conversation.objects.create(
+            user=request.user,
+            title=title,
+            model_name=model_name
+        )
+
     return JsonResponse({
         'id': str(conv.id),
         'title': conv.title,
@@ -243,7 +257,7 @@ def send_message_stream(request, conversation_id):
         user_msg.attached_files.set(attached_files)
 
     # Auto-generate title if this is the first user message
-    if conv.title == 'New Chat' or conv.messages.filter(role='user').count() == 1:
+    if conv.title in ['New Chat', 'New Conversation'] or conv.messages.filter(role='user').count() == 1:
         auto_title = prompt.split('\n')[0][:35]
         if len(prompt) > 35:
             auto_title += '...'

@@ -21,7 +21,7 @@
                 </div>
             </div>
 
-            <button type="button" class="btn-new-chat" id="btnNewChat">
+            <button type="button" class="btn-new-chat" id="btnNewChat" onclick="startNewConversation()">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <line x1="12" y1="5" x2="12" y2="19"></line>
                     <line x1="5" y1="12" x2="19" y2="12"></line>
@@ -52,7 +52,7 @@
                     </div>
                 </div>
             {% empty %}
-                <div style="padding: 16px; color: var(--text-muted); font-size: 0.85rem; text-align: center;">
+                <div class="no-chats-notice" style="padding: 16px; color: var(--text-muted); font-size: 0.85rem; text-align: center;">
                     No chats yet. Start a new one!
                 </div>
             {% endfor %}
