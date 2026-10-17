@@ -10,10 +10,18 @@ For the full list of settings and their values, see
 https://docs.djangoproject.com/en/3.2/ref/settings/
 """
 
+import sys
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
+if getattr(sys, 'frozen', False):
+    # PyInstaller temporary extraction directory for bundled code & templates
+    BASE_DIR = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parent.parent)).resolve()
+    # User data directory (next to the .exe) for database and uploaded media
+    DATA_DIR = Path(sys.executable).resolve().parent
+else:
+    BASE_DIR = Path(__file__).resolve().parent.parent
+    DATA_DIR = BASE_DIR
 
 
 # Quick-start development settings - unsuitable for production
@@ -78,7 +86,7 @@ WSGI_APPLICATION = 'ollama_web.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': DATA_DIR / 'db.sqlite3',
     }
 }
 
@@ -127,7 +135,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 # Media files (File uploads)
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = DATA_DIR / 'media'
 
 # Authentication redirects
 LOGIN_URL = 'login'

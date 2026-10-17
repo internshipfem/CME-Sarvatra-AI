@@ -39,7 +39,25 @@ C) TO DEACTIVATE LATER:
 
 
 --------------------------------------------------------------------------------
-AIR-GAPPED PACKAGING & DEPLOYMENT (BUILD & INSTALL)
+OPTION 1: STANDALONE EXECUTABLE (NO PYTHON REQUIRED ON TARGET PC)
+--------------------------------------------------------------------------------
+A completely self-contained executable is already compiled:
+    OllamaChat.exe (22.8 MB)
+
+To deploy on any air-gapped PC:
+  1. Simply copy 'OllamaChat.exe' to any folder on the target machine.
+     (The target machine DOES NOT need Python or pip installed!)
+  2. Double-click 'OllamaChat.exe'.
+  3. It will automatically connect to local Ollama, verify the database,
+     auto-create the 'admin' account, and launch http://127.0.0.1:8000 in your browser.
+
+To recompile the .exe in the future:
+  Double-click:
+      build_exe.bat
+
+
+--------------------------------------------------------------------------------
+OPTION 2: PYTHON SOURCE & WHEELS BUNDLE (BUILD & INSTALL)
 --------------------------------------------------------------------------------
 
 A) TO BUILD THE ZIP BUNDLE (ON CONNECTED/DEV MACHINE):
