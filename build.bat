@@ -17,7 +17,7 @@ if errorlevel 1 (
 )
 
 :: 2. Ensure offline wheels are downloaded
-echo [2/3] Downloading/verifying offline wheels into wheels/ directory...
+echo [2/4] Downloading/verifying offline wheels into wheels/ directory...
 if not exist "wheels" mkdir wheels
 
 if exist "venv\Scripts\python.exe" (
@@ -33,8 +33,21 @@ if errorlevel 1 (
 )
 echo.
 
-:: 3. Create bundled ZIP archive
-echo [3/3] Creating bundled ZIP archive (excluding venv, cache, and db)...
+:: 3. Build standalone OllamaChat.exe with PyInstaller
+echo [3/4] Building standalone OllamaChat.exe with PyInstaller...
+if exist "venv\Scripts\pyinstaller.exe" (
+    venv\Scripts\pyinstaller OllamaChat.spec --clean --noconfirm
+    if exist "dist\OllamaChat.exe" (
+        copy /y "dist\OllamaChat.exe" "OllamaChat.exe" >nul
+        echo [OK] Successfully built: OllamaChat.exe
+    )
+) else (
+    echo [WARNING] PyInstaller not found in venv. Skipping .exe build (run build_exe.bat to install PyInstaller).
+)
+echo.
+
+:: 4. Create bundled ZIP archive
+echo [4/4] Creating bundled ZIP archive (excluding venv, cache, and db)...
 if exist "venv\Scripts\python.exe" (
     venv\Scripts\python package_bundle.py
 ) else (
@@ -52,14 +65,16 @@ echo =====================================================================
 echo                     BUILD COMPLETE!
 echo =====================================================================
 echo.
-echo The deployment package has been generated:
-echo   --^> Ollama_Chat_AirGapped_Bundle.zip
+echo The following release artifacts have been generated:
+echo   1. Standalone Executable:
+echo      --^> OllamaChat.exe (Portable - No Python required on target PC)
 echo.
-echo To install on any Air-Gapped machine:
-echo   1. Copy 'Ollama_Chat_AirGapped_Bundle.zip' to the air-gapped machine.
-echo   2. Extract the ZIP file into a folder.
-echo   3. Double-click 'install.bat' to install the app completely offline.
-echo   4. Double-click 'run_app.bat' to launch the app!
+echo   2. Source & Offline Wheels Bundle:
+echo      --^> Ollama_Chat_AirGapped_Bundle.zip
+echo.
+echo Deployment options for your Air-Gapped machine:
+echo   Option A (Fastest): Just copy 'OllamaChat.exe' and double-click it.
+echo   Option B (Python): Copy the ZIP, extract, and run 'install.bat'.
 echo.
 echo =====================================================================
 pause
