@@ -77,10 +77,6 @@ def chat_home(request, conversation_id=None):
     if conversation_id:
         active_conversation = get_object_or_404(Conversation, id=conversation_id, user=user)
         messages = active_conversation.messages.all().prefetch_related('attached_files')
-    elif conversations.exists():
-        # Open most recent conversation
-        active_conversation = conversations.first()
-        messages = active_conversation.messages.all().prefetch_related('attached_files')
 
     # Get employee details
     profile = getattr(user, 'profile', None)

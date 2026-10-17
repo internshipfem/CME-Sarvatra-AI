@@ -101,10 +101,20 @@ function enhanceCodeBlocks(html) {
 
 function initExistingMessages() {
     document.querySelectorAll('.message-bubble.markdown-content').forEach((bubble) => {
-        const raw = bubble.getAttribute('data-raw') || '';
+        const rawScript = bubble.querySelector('.raw-markdown-data');
         const renderedTarget = bubble.querySelector('.rendered-markdown');
-        if (renderedTarget && raw) {
-            renderedTarget.innerHTML = renderMarkdownText(raw);
+        if (renderedTarget) {
+            let raw = '';
+            if (rawScript) {
+                raw = rawScript.textContent;
+            } else {
+                raw = bubble.getAttribute('data-raw') || '';
+            }
+            if (raw) {
+                // Unescape any escaped unicode newlines or literals
+                raw = raw.replace(/\\u000A/g, '\n').replace(/\\u000a/g, '\n');
+                renderedTarget.innerHTML = renderMarkdownText(raw);
+            }
         }
     });
 }
@@ -686,15 +696,17 @@ function addNewChatToSidebar(id, title) {
     const item = document.createElement('div');
     item.className = 'chat-item active';
     item.id = `chat-item-${id}`;
+    item.style.cursor = 'pointer';
+    item.onclick = () => { window.location.href = `/c/${id}/`; };
     item.innerHTML = `
-        <a href="/c/${id}/" class="chat-item-title" title="${escapeHtml(title)}">${escapeHtml(title)}</a>
+        <span class="chat-item-title" title="${escapeHtml(title)}">${escapeHtml(title)}</span>
         <div class="chat-item-actions">
-            <button class="btn-icon-sm rename-chat-btn" data-id="${id}" data-title="${escapeHtml(title)}" title="Rename">
+            <button class="btn-icon-sm rename-chat-btn" data-id="${id}" data-title="${escapeHtml(title)}" title="Rename" onclick="event.stopPropagation()">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"></path>
                 </svg>
             </button>
-            <button class="btn-icon-sm delete delete-chat-btn" data-id="${id}" title="Delete">
+            <button class="btn-icon-sm delete delete-chat-btn" data-id="${id}" title="Delete" onclick="event.stopPropagation()">
                 <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <polyline points="3 6 5 6 21 6"></polyline>
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
