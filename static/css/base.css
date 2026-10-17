@@ -90,21 +90,60 @@ body {
 .sidebar {
   width: 280px;
   min-width: 280px;
+  max-width: 280px;
   background-color: var(--bg-sidebar);
   border-right: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
-  height: 100%;
-  transition: transform 0.25s ease;
+  height: 100vh;
+  max-height: 100vh;
+  overflow: hidden;
+  transition: width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              min-width 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              margin-left 0.22s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s ease,
+              visibility 0.22s ease;
   z-index: 50;
+  flex-shrink: 0;
+}
+
+.sidebar.collapsed {
+  width: 0 !important;
+  min-width: 0 !important;
+  max-width: 0 !important;
+  margin-left: -280px !important;
+  border-right: none !important;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .sidebar-header {
+  flex-shrink: 0;
   padding: 16px 16px 12px 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   border-bottom: 1px solid var(--border-color);
+}
+
+.btn-sidebar-collapse {
+  background: transparent;
+  border: 1px solid var(--border-color);
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: var(--radius-sm);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.btn-sidebar-collapse:hover {
+  background-color: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .brand {
@@ -185,12 +224,28 @@ body {
 }
 
 .conversations-nav {
-  flex: 1;
+  flex: 1 1 auto;
   overflow-y: auto;
+  overflow-x: hidden;
+  min-height: 0;
   padding: 12px 8px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.conversations-nav::-webkit-scrollbar {
+  width: 5px;
+}
+.conversations-nav::-webkit-scrollbar-track {
+  background: transparent;
+}
+.conversations-nav::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
+  border-radius: 9999px;
+}
+.conversations-nav::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
 }
 
 .nav-section-title {
@@ -358,6 +413,7 @@ body {
 
 /* User profile section in sidebar */
 .sidebar-footer {
+  flex-shrink: 0;
   padding: 14px 16px;
   border-top: 1px solid var(--border-color);
   background-color: rgba(0, 0, 0, 0.15);
@@ -457,13 +513,22 @@ body {
 }
 
 .sidebar-toggle-btn {
-  display: none;
-  background: transparent;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-card);
   border: 1px solid var(--border-color);
-  color: var(--text-primary);
-  padding: 6px 10px;
-  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  padding: 6px 9px;
+  border-radius: var(--radius-md);
   cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.sidebar-toggle-btn:hover {
+  background-color: var(--bg-card-hover);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .model-selector-wrapper {
@@ -703,6 +768,52 @@ body {
   color: var(--accent);
 }
 
+/* Message Action Bar & Copy Message Button */
+.message-actions-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 2px 4px;
+  opacity: 0.85;
+  transition: opacity 0.15s ease;
+}
+
+.message-row:hover .message-actions-bar {
+  opacity: 1;
+}
+
+.message-row.user .message-actions-bar {
+  justify-content: flex-end;
+}
+
+.btn-copy-msg {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  font-size: 0.74rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: var(--radius-sm);
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.btn-copy-msg:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
+.message-row.user .btn-copy-msg {
+  background: rgba(255, 255, 255, 0.04);
+}
+
 /* Latency & Telemetry Metric Bar (Bottleneck tracking) */
 .message-metrics-bar {
   display: inline-flex;
@@ -710,8 +821,6 @@ body {
   gap: 12px;
   font-size: 0.74rem;
   color: var(--text-muted);
-  padding: 4px 8px;
-  margin-top: 2px;
 }
 
 .metric-pill {
@@ -770,22 +879,87 @@ body {
   margin: 10px 0;
 }
 
-.message-bubble table {
+/* Table Blocks with Header, Responsive Scroll, and Copy Button */
+.table-block-wrapper {
+  margin: 14px 0;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+  background-color: var(--bg-card);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  background-color: var(--bg-code-header);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 0.76rem;
+  color: var(--text-muted);
+}
+
+.table-header .table-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.btn-copy-table {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+.btn-copy-table:hover {
+  background-color: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.25);
+}
+
+.table-responsive-wrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table-block-wrapper table {
   width: 100%;
   border-collapse: collapse;
-  margin: 12px 0;
+  margin: 0;
   font-size: 0.88rem;
 }
 
-.message-bubble th, .message-bubble td {
+.table-block-wrapper th,
+.table-block-wrapper td {
   border: 1px solid var(--border-color);
   padding: 8px 12px;
   text-align: left;
 }
 
-.message-bubble th {
-  background-color: var(--bg-card);
+.table-block-wrapper th {
+  background-color: rgba(255, 255, 255, 0.04);
   font-weight: 600;
+  color: var(--text-primary);
+}
+
+.table-block-wrapper tr:nth-child(even) td {
+  background-color: rgba(255, 255, 255, 0.015);
+}
+
+.table-block-wrapper tr:hover td {
+  background-color: rgba(59, 130, 246, 0.05);
 }
 
 .message-bubble code:not(pre code) {
@@ -1168,14 +1342,24 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* Sidebar Backdrop for Mobile Drawer */
+.sidebar-backdrop {
+  display: none;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .sidebar {
-    position: absolute;
+    position: fixed;
     left: 0;
     top: 0;
     bottom: 0;
+    height: 100vh;
     transform: translateX(-100%);
+    margin-left: 0 !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    z-index: 1000;
   }
 
   .sidebar.open {
@@ -1184,5 +1368,25 @@ body {
 
   .sidebar-toggle-btn {
     display: inline-flex;
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.65);
+    backdrop-filter: blur(4px);
+    z-index: 999;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+
+  .sidebar-backdrop.active {
+    opacity: 1;
+    pointer-events: auto;
   }
 }

@@ -69,18 +69,21 @@ function renderMarkdownText(rawMarkdown) {
         return escapeHtml(rawMarkdown).replace(/\n/g, '<br>');
     }
     const html = marked.parse(rawMarkdown);
-    return enhanceCodeBlocks(html);
+    return enhanceMarkdownElements(html);
 }
 
-function enhanceCodeBlocks(html) {
+function enhanceMarkdownElements(html) {
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
 
+    // 1. Enhance Code Blocks with Language Header & Copy Button
     tempDiv.querySelectorAll('pre code').forEach((codeBlock) => {
         const pre = codeBlock.parentElement;
+        if (pre.parentElement && pre.parentElement.classList.contains('code-block-wrapper')) {
+            return;
+        }
         const codeText = codeBlock.textContent;
 
-        // Try highlighting with highlight.js if available
         if (typeof hljs !== 'undefined') {
             try {
                 hljs.highlightElement(codeBlock);
@@ -89,7 +92,6 @@ function enhanceCodeBlocks(html) {
             }
         }
 
-        // Get language
         let lang = 'code';
         const classes = codeBlock.className.split(' ');
         for (const c of classes) {
@@ -99,7 +101,6 @@ function enhanceCodeBlocks(html) {
             }
         }
 
-        // Create sleek wrapper with header & copy button
         const wrapper = document.createElement('div');
         wrapper.className = 'code-block-wrapper';
 
@@ -116,19 +117,105 @@ function enhanceCodeBlocks(html) {
             </button>
         `;
 
-        const copyBtn = header.querySelector('.btn-copy-code');
-        copyBtn.addEventListener('click', () => {
-            copyToClipboard(codeText, copyBtn);
-        });
-
-        // Insert wrapper
         pre.parentNode.insertBefore(wrapper, pre);
         wrapper.appendChild(header);
         wrapper.appendChild(pre);
     });
 
+    // 2. Enhance Tables with Header, Table Data Label & Copy Table Button
+    tempDiv.querySelectorAll('table').forEach((table) => {
+        if (table.parentElement && table.parentElement.classList.contains('table-responsive-wrapper')) {
+            return;
+        }
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'table-block-wrapper';
+
+        const header = document.createElement('div');
+        header.className = 'table-header';
+        header.innerHTML = `
+            <div class="table-title">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                    <line x1="3" y1="9" x2="21" y2="9"></line>
+                    <line x1="3" y1="15" x2="21" y2="15"></line>
+                    <line x1="9" y1="3" x2="9" y2="21"></line>
+                    <line x1="15" y1="3" x2="15" y2="21"></line>
+                </svg>
+                <span>Table Data</span>
+            </div>
+            <button class="btn-copy-table" type="button" title="Copy table data (Excel / Word / Sheets compatible)">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>Copy Table</span>
+            </button>
+        `;
+
+        const scrollContainer = document.createElement('div');
+        scrollContainer.className = 'table-responsive-wrapper';
+
+        table.parentNode.insertBefore(wrapper, table);
+        scrollContainer.appendChild(table);
+        wrapper.appendChild(header);
+        wrapper.appendChild(scrollContainer);
+    });
+
     return tempDiv.innerHTML;
 }
+
+function copyTableData(table, buttonElement) {
+    if (!table) return;
+    const rows = Array.from(table.querySelectorAll('tr'));
+    if (rows.length === 0) return;
+
+    const rowTexts = rows.map(row => {
+        const cells = Array.from(row.querySelectorAll('th, td'));
+        return cells.map(c => {
+            let text = c.innerText.replace(/[\r\n]+/g, ' ').trim();
+            if (text.includes('\t') || text.includes('"')) {
+                text = `"${text.replace(/"/g, '""')}"`;
+            }
+            return text;
+        }).join('\t');
+    });
+
+    const tsvContent = rowTexts.join('\n');
+    copyToClipboard(tsvContent, buttonElement);
+}
+window.copyTableData = copyTableData;
+
+function copyCompleteMessage(buttonElement) {
+    const messageWrapper = buttonElement.closest('.message-content-wrapper');
+    if (!messageWrapper) return;
+
+    const bubble = messageWrapper.querySelector('.message-bubble');
+    if (!bubble) return;
+
+    let textToCopy = '';
+
+    const renderedTarget = bubble.querySelector('.rendered-markdown');
+    const rawScript = bubble.querySelector('.raw-markdown-data');
+
+    if (renderedTarget && renderedTarget.dataset.raw) {
+        textToCopy = renderedTarget.dataset.raw.trim();
+    } else if (rawScript && rawScript.textContent.trim()) {
+        textToCopy = rawScript.textContent.trim();
+    } else if (bubble.dataset.raw) {
+        textToCopy = bubble.dataset.raw.trim();
+    } else {
+        // Fallback: clone bubble, remove headers and buttons, and grab innerText
+        const clone = bubble.cloneNode(true);
+        clone.querySelectorAll('.code-header, .table-header, .btn-copy-code, .btn-copy-table').forEach(el => el.remove());
+        textToCopy = clone.innerText.trim();
+    }
+
+    if (textToCopy) {
+        copyToClipboard(textToCopy, buttonElement);
+    }
+}
+window.copyCompleteMessage = copyCompleteMessage;
 
 function initExistingMessages() {
     document.querySelectorAll('.message-bubble.markdown-content').forEach((bubble) => {
@@ -329,12 +416,17 @@ async function sendMessage() {
 
         // Final render check
         bubbleTarget.innerHTML = renderMarkdownText(accumulatedText);
+        bubbleTarget.dataset.raw = accumulatedText;
 
     } catch (err) {
         if (err.name === 'AbortError') {
-            bubbleTarget.innerHTML = renderMarkdownText(accumulatedText + '\n\n*(Generation stopped by user)*');
+            const finalTxt = accumulatedText + '\n\n*(Generation stopped by user)*';
+            bubbleTarget.innerHTML = renderMarkdownText(finalTxt);
+            bubbleTarget.dataset.raw = finalTxt;
         } else {
-            bubbleTarget.innerHTML = renderMarkdownText(accumulatedText + `\n\n**Error:** ${err.message}`);
+            const finalTxt = accumulatedText + `\n\n**Error:** ${err.message}`;
+            bubbleTarget.innerHTML = renderMarkdownText(finalTxt);
+            bubbleTarget.dataset.raw = finalTxt;
         }
     } finally {
         setGeneratingState(false);
@@ -408,6 +500,15 @@ function appendUserMessageToUI(content, files) {
             <div class="message-bubble">
                 <p style="white-space: pre-wrap;">${escapeHtml(content)}</p>
             </div>
+            <div class="message-actions-bar">
+                <button type="button" class="btn-copy-msg" title="Copy complete message" onclick="copyCompleteMessage(this)">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <span>Copy</span>
+                </button>
+            </div>
         </div>
     `;
 
@@ -432,7 +533,16 @@ function createAssistantMessagePlaceholder() {
                     </div>
                 </div>
             </div>
-            <div class="message-metrics-bar"></div>
+            <div class="message-actions-bar">
+                <button type="button" class="btn-copy-msg" title="Copy complete message" onclick="copyCompleteMessage(this)">
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    <span>Copy</span>
+                </button>
+                <div class="message-metrics-bar"></div>
+            </div>
         </div>
     `;
 
@@ -1070,14 +1180,119 @@ function scrollToBottom() {
     }
 }
 
-function setupSidebarToggle() {
-    const toggleBtn = document.getElementById('sidebarToggle');
+function initSidebarState() {
+    const isCollapsed = localStorage.getItem('sarvatra_sidebar_collapsed') === 'true';
     const sidebar = document.getElementById('sidebar');
-    if (toggleBtn && sidebar) {
-        toggleBtn.addEventListener('click', () => {
-            sidebar.classList.toggle('open');
-        });
+    const toggleBtn = document.getElementById('sidebarToggle');
+    if (sidebar && window.innerWidth > 768) {
+        if (isCollapsed) {
+            sidebar.classList.add('collapsed');
+            if (toggleBtn) {
+                toggleBtn.setAttribute('title', 'Expand sidebar (Ctrl+B)');
+            }
+        } else {
+            sidebar.classList.remove('collapsed');
+            if (toggleBtn) {
+                toggleBtn.setAttribute('title', 'Collapse sidebar (Ctrl+B)');
+            }
+        }
     }
+}
+
+function toggleSidebarCollapse(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    const toggleBtn = document.getElementById('sidebarToggle');
+    if (!sidebar) return;
+
+    if (window.innerWidth <= 768) {
+        // Mobile drawer toggle
+        const isOpen = sidebar.classList.toggle('open');
+        if (backdrop) {
+            backdrop.classList.toggle('active', isOpen);
+        }
+    } else {
+        // Desktop collapse toggle
+        const isCollapsed = sidebar.classList.toggle('collapsed');
+        localStorage.setItem('sarvatra_sidebar_collapsed', isCollapsed ? 'true' : 'false');
+        if (toggleBtn) {
+            toggleBtn.setAttribute('title', isCollapsed ? 'Expand sidebar (Ctrl+B)' : 'Collapse sidebar (Ctrl+B)');
+        }
+    }
+}
+window.toggleSidebarCollapse = toggleSidebarCollapse;
+
+function closeSidebarMobile() {
+    const sidebar = document.getElementById('sidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+    if (sidebar) sidebar.classList.remove('open');
+    if (backdrop) backdrop.classList.remove('active');
+}
+window.closeSidebarMobile = closeSidebarMobile;
+
+function setupSidebarToggle() {
+    initSidebarState();
+
+    // Resize listener to adapt collapse state between mobile & desktop
+    window.addEventListener('resize', () => {
+        if (window.innerWidth > 768) {
+            const backdrop = document.getElementById('sidebarBackdrop');
+            if (backdrop) backdrop.classList.remove('active');
+            const sidebar = document.getElementById('sidebar');
+            if (sidebar) sidebar.classList.remove('open');
+            initSidebarState();
+        }
+    });
+
+    // Keyboard shortcut Ctrl+B / Cmd+B to toggle sidebar
+    document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
+            e.preventDefault();
+            toggleSidebarCollapse();
+        }
+    });
+
+    // Document-level event delegation for Copy Buttons (Code, Table, Message)
+    document.addEventListener('click', (e) => {
+        // Copy Code button
+        const copyCodeBtn = e.target.closest('.btn-copy-code');
+        if (copyCodeBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const wrapper = copyCodeBtn.closest('.code-block-wrapper');
+            if (wrapper) {
+                const codeEl = wrapper.querySelector('pre code') || wrapper.querySelector('pre');
+                if (codeEl) copyToClipboard(codeEl.textContent, copyCodeBtn);
+            }
+            return;
+        }
+
+        // Copy Table button
+        const copyTableBtn = e.target.closest('.btn-copy-table');
+        if (copyTableBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const wrapper = copyTableBtn.closest('.table-block-wrapper');
+            if (wrapper) {
+                const table = wrapper.querySelector('table');
+                if (table) copyTableData(table, copyTableBtn);
+            }
+            return;
+        }
+
+        // Copy Message button
+        const copyMsgBtn = e.target.closest('.btn-copy-msg');
+        if (copyMsgBtn) {
+            e.preventDefault();
+            e.stopPropagation();
+            copyCompleteMessage(copyMsgBtn);
+            return;
+        }
+    });
 }
 
 function escapeHtml(text) {
