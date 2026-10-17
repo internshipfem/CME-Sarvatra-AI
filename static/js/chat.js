@@ -37,11 +37,14 @@ function setupTextareaAutoresize() {
 
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
+    try {
+        localStorage.removeItem('sarvatra_sidebar_collapsed');
+    } catch (e) {}
     initMarkdownAndHighlighting();
     initExistingMessages();
     setupTextareaAutoresize();
     setupDragAndDrop();
-    setupSidebarToggle();
+    setupCopyButtonDelegation();
     setupEventHandlers();
     scrollToBottom();
 
@@ -1180,173 +1183,9 @@ function scrollToBottom() {
     }
 }
 
-function updateSidebarUIState(isOpen) {
-    const sidebar = document.getElementById('sidebar');
-    const toggleBtn = document.getElementById('sidebarToggle');
-    const toggleIcon = document.getElementById('sidebarToggleIcon');
-    const toggleText = document.getElementById('sidebarToggleText');
-    const floatingTab = document.getElementById('floatingSidebarTab');
-    const layout = document.querySelector('.app-layout');
-
-    if (!isOpen) {
-        // Collapsed state
-        if (sidebar) {
-            sidebar.classList.add('collapsed');
-            sidebar.classList.remove('open');
-        }
-        if (layout) layout.classList.add('sidebar-collapsed');
-
-        if (toggleBtn) {
-            toggleBtn.classList.add('collapsed-mode');
-            toggleBtn.setAttribute('title', 'Open sidebar (Ctrl+B)');
-        }
-        if (toggleIcon) {
-            toggleIcon.innerHTML = `
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="3" y1="12" x2="21" y2="12"></line>
-                    <line x1="3" y1="6" x2="21" y2="6"></line>
-                    <line x1="3" y1="18" x2="21" y2="18"></line>
-                </svg>
-            `;
-        }
-        if (toggleText) {
-            toggleText.style.display = 'inline';
-            toggleText.textContent = 'Open Sidebar';
-        }
-        if (floatingTab) {
-            floatingTab.style.display = 'flex';
-        }
-    } else {
-        // Open state
-        if (sidebar) {
-            sidebar.classList.remove('collapsed');
-        }
-        if (layout) layout.classList.remove('sidebar-collapsed');
-
-        if (toggleBtn) {
-            toggleBtn.classList.remove('collapsed-mode');
-            toggleBtn.setAttribute('title', 'Collapse sidebar (Ctrl+B)');
-        }
-        if (toggleIcon) {
-            toggleIcon.innerHTML = `
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <line x1="3" y1="12" x2="21" y2="12"></line>
-                    <line x1="3" y1="6" x2="21" y2="6"></line>
-                    <line x1="3" y1="18" x2="21" y2="18"></line>
-                </svg>
-            `;
-        }
-        if (toggleText) {
-            toggleText.style.display = 'inline';
-            toggleText.textContent = 'Sidebar';
-        }
-        if (floatingTab) {
-            floatingTab.style.display = 'none';
-        }
-    }
-}
-
-function initSidebarState() {
-    // Clear any previous auto-collapsed state so the user is never trapped
-    localStorage.removeItem('sarvatra_sidebar_collapsed');
-
-    const sidebar = document.getElementById('sidebar');
-    if (!sidebar) return;
-
-    if (window.innerWidth <= 768) {
-        // On mobile, start drawer closed
-        sidebar.classList.remove('collapsed');
-        sidebar.classList.remove('open');
-        updateSidebarUIState(false);
-    } else {
-        // On desktop, ALWAYS start sidebar OPEN on page reload!
-        sidebar.classList.remove('collapsed');
-        sidebar.classList.remove('open');
-        updateSidebarUIState(true);
-    }
-}
-
-function toggleSidebarCollapse(event) {
-    if (event) {
-        event.preventDefault();
-        event.stopPropagation();
-    }
-    const sidebar = document.getElementById('sidebar');
-    const backdrop = document.getElementById('sidebarBackdrop');
-    if (!sidebar) return;
-
-    const isMobile = window.innerWidth <= 768;
-
-    if (isMobile) {
-        sidebar.classList.remove('collapsed');
-        const isOpen = sidebar.classList.toggle('open');
-        if (backdrop) backdrop.classList.toggle('active', isOpen);
-        updateSidebarUIState(isOpen);
-    } else {
-        sidebar.classList.remove('open');
-        if (backdrop) backdrop.classList.remove('active');
-        const currentlyCollapsed = sidebar.classList.contains('collapsed');
-        const shouldBeOpen = currentlyCollapsed; // if currently collapsed, we open it
-        updateSidebarUIState(shouldBeOpen);
-    }
-}
-window.toggleSidebarCollapse = toggleSidebarCollapse;
-
-function closeSidebarMobile() {
-    const sidebar = document.getElementById('sidebar');
-    const backdrop = document.getElementById('sidebarBackdrop');
-    if (sidebar) sidebar.classList.remove('open');
-    if (backdrop) backdrop.classList.remove('active');
-}
-window.closeSidebarMobile = closeSidebarMobile;
-
-function setupSidebarToggle() {
-    initSidebarState();
-
-    // Direct event listener binding
-    const toggleBtn = document.getElementById('sidebarToggle');
-    if (toggleBtn) {
-        toggleBtn.addEventListener('click', toggleSidebarCollapse);
-    }
-    const floatingTab = document.getElementById('floatingSidebarTab');
-    if (floatingTab) {
-        floatingTab.addEventListener('click', toggleSidebarCollapse);
-    }
-    const collapseBtn = document.getElementById('btnSidebarCollapse');
-    if (collapseBtn) {
-        collapseBtn.addEventListener('click', toggleSidebarCollapse);
-    }
-
-    // Resize listener to adapt collapse state between mobile & desktop
-    window.addEventListener('resize', () => {
-        if (window.innerWidth > 768) {
-            const backdrop = document.getElementById('sidebarBackdrop');
-            if (backdrop) backdrop.classList.remove('active');
-            const sidebar = document.getElementById('sidebar');
-            if (sidebar) sidebar.classList.remove('open');
-            initSidebarState();
-        }
-    });
-
-    // Keyboard shortcut Ctrl+B / Cmd+B to toggle sidebar
-    document.addEventListener('keydown', (e) => {
-        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'b') {
-            e.preventDefault();
-            toggleSidebarCollapse();
-        }
-    });
-
-    // Document-level event delegation for Copy Buttons and Sidebar Toggle
+function setupCopyButtonDelegation() {
+    // Document-level event delegation for Copy Buttons (Code, Table, Message)
     document.addEventListener('click', (e) => {
-        // Sidebar toggle delegation fallback
-        const sidebarClick = e.target.closest('#sidebarToggle, #floatingSidebarTab, #btnSidebarCollapse');
-        if (sidebarClick) {
-            e.preventDefault();
-            e.stopPropagation();
-            toggleSidebarCollapse(e);
-            return;
-        }
-
         // Copy Code button
         const copyCodeBtn = e.target.closest('.btn-copy-code');
         if (copyCodeBtn) {

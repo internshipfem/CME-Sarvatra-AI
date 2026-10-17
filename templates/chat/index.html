@@ -15,19 +15,9 @@
                     <img src="{% static 'img/CME_logo.png' %}" alt="CME Logo" style="width: 30px; height: 30px; object-fit: contain;">
                     <span>Sarvatra AI</span>
                 </a>
-                <div style="display: flex; align-items: center; gap: 6px;">
-                    <div class="status-indicator {% if ollama_healthy %}status-online{% else %}status-offline{% endif %}" id="ollamaStatusBadge">
-                        <span class="status-dot"></span>
-                        <span id="ollamaStatusText">{% if ollama_healthy %}Local Online{% else %}Offline{% endif %}</span>
-                    </div>
-                    <button type="button" class="btn-sidebar-collapse" id="btnSidebarCollapse" title="Collapse sidebar (Ctrl+B)" onclick="toggleSidebarCollapse(event)">
-                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                            <line x1="9" y1="3" x2="9" y2="21"></line>
-                            <polyline points="14 9 11 12 14 15"></polyline>
-                        </svg>
-                        <span style="font-size: 0.72rem; font-weight: 600; margin-left: 4px;">Hide</span>
-                    </button>
+                <div class="status-indicator {% if ollama_healthy %}status-online{% else %}status-offline{% endif %}" id="ollamaStatusBadge">
+                    <span class="status-dot"></span>
+                    <span id="ollamaStatusText">{% if ollama_healthy %}Local Online{% else %}Offline{% endif %}</span>
                 </div>
             </div>
 
@@ -90,33 +80,11 @@
             </a>
         </div>
     </aside>
-    <div class="sidebar-backdrop" id="sidebarBackdrop" onclick="closeSidebarMobile()"></div>
-
     <!-- Main Chat Workspace -->
     <main class="chat-workspace">
-        <!-- Floating tab to reopen sidebar when collapsed -->
-        <button type="button" class="floating-sidebar-tab" id="floatingSidebarTab" title="Open Sidebar (Ctrl+B)" onclick="toggleSidebarCollapse(event)">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                <line x1="3" y1="12" x2="21" y2="12"></line>
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <line x1="3" y1="18" x2="21" y2="18"></line>
-            </svg>
-            <span>Open Sidebar (Ctrl+B)</span>
-        </button>
-
         <!-- Top Workspace Bar -->
         <header class="chat-header">
             <div class="header-left">
-                <button type="button" class="sidebar-toggle-btn" id="sidebarToggle" title="Toggle sidebar (Ctrl+B)" onclick="toggleSidebarCollapse(event)">
-                    <span class="sidebar-toggle-icon" id="sidebarToggleIcon">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <line x1="3" y1="12" x2="21" y2="12"></line>
-                            <line x1="3" y1="6" x2="21" y2="6"></line>
-                            <line x1="3" y1="18" x2="21" y2="18"></line>
-                        </svg>
-                    </span>
-                    <span class="sidebar-toggle-text" id="sidebarToggleText" style="font-size: 0.85rem; font-weight: 600; margin-left: 6px;">Sidebar</span>
-                </button>
 
                 <div class="model-selector-wrapper">
                     <label for="modelSelect">Model</label>
@@ -305,5 +273,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/chat.js' %}?v=1.4"></script>
+<script src="{% static 'js/chat.js' %}?v=1.5"></script>
 {% endblock %}
