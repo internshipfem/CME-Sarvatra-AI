@@ -10,7 +10,12 @@ logger = logging.getLogger(__name__)
 
 class OllamaClient:
     def __init__(self, base_url=None):
-        self.base_url = (base_url or getattr(settings, 'OLLAMA_BASE_URL', 'http://127.0.0.1:11434')).rstrip('/')
+        if base_url:
+            self.base_url = base_url.rstrip('/')
+        elif settings.configured:
+            self.base_url = getattr(settings, 'OLLAMA_BASE_URL', 'http://127.0.0.1:11434').rstrip('/')
+        else:
+            self.base_url = 'http://127.0.0.1:11434'
 
     def get_installed_models_cli(self):
         """Fetch models using the `ollama list` CLI command."""
