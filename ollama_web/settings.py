@@ -22,8 +22,28 @@ else:
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/3.2/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.environ.get('SECRET_KEY', 'django-insecure--!@jo3&=x88^e)jp0(wcts)v*!br^h6zdr#d4whk8efh*j=9in')
+# Dynamic Cryptographic Secret Key Management for Air-Gapped Node
+def _get_or_create_secret_key():
+    env_key = os.environ.get('SECRET_KEY')
+    if env_key:
+        return env_key
+    key_file = DATA_DIR / '.secret_key'
+    try:
+        if key_file.exists():
+            with open(key_file, 'r', encoding='utf-8') as f:
+                k = f.read().strip()
+                if k:
+                    return k
+        from django.core.management.utils import get_random_secret_key
+        new_k = get_random_secret_key()
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(key_file, 'w', encoding='utf-8') as f:
+            f.write(new_k)
+        return new_k
+    except Exception:
+        return 'django-insecure--!@jo3&=x88^e)jp0(wcts)v*!br^h6zdr#d4whk8efh*j=9in'
+
+SECRET_KEY = _get_or_create_secret_key()
 
 # DEBUG: True in local dev/desktop by default; set DJANGO_DEBUG=False for strict production
 DEBUG = os.environ.get('DJANGO_DEBUG', 'True').lower() in ('true', '1')
@@ -156,3 +176,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # SQLite WAL mode for higher concurrent read/write throughput on air-gapped node
 SQLITE_WAL_MODE = True
 
+
+
+# Session Security & Workstation Protection
+SESSION_COOKIE_AGE = int(os.environ.get('DJANGO_SESSION_COOKIE_AGE', 7200))  # 2 hours
+SESSION_SAVE_EVERY_REQUEST = True
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True

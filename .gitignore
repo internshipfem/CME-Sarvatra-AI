@@ -39,3 +39,4 @@ media/
 backups/
 *.sqlite3-wal
 *.sqlite3-shm
+.secret_key

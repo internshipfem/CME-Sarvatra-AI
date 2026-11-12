@@ -978,6 +978,18 @@ def upload_signature_api(request):
     if image_file.size > 2 * 1024 * 1024:
         return JsonResponse({'error': 'Signature image must be under 2 MB'}, status=400)
 
+    # Validate image bytes and format integrity using Pillow (Air-Gap Defense Security)
+    try:
+        from PIL import Image
+        with Image.open(image_file) as img:
+            img.verify()
+            fmt = (img.format or '').upper()
+            if fmt not in ('PNG', 'JPEG', 'JPG'):
+                return JsonResponse({'error': f'Image format {fmt} not supported. Use PNG or JPG.'}, status=400)
+        image_file.seek(0)
+    except Exception:
+        return JsonResponse({'error': 'Invalid or corrupted image file structure'}, status=400)
+
     from .models import SignatureAsset
     label = request.POST.get('label', 'My Signature').strip() or 'My Signature'
     is_default = request.POST.get('is_default', 'false').lower() in ('true', '1')

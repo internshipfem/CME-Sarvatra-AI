@@ -1,3 +1,32 @@
+
+function detectDocumentIntent(text) {
+    if (!text || typeof text !== 'string') return null;
+    const lower = text.toLowerCase();
+    
+    if (/\b(leave|casual leave|annual leave|station leave|sick leave)\b/.test(lower)) {
+        return { type: 'leave_application', label: 'Leave Application' };
+    }
+    if (/\b(letter|formal letter|doh letter|demi official|hq letter)\b/.test(lower) && /\b(draft|write|compose|prepare|generate|format|create|send)\b/.test(lower)) {
+        return { type: 'formal_letter', label: 'Formal Military Letter' };
+    }
+    if (/\b(memo|memorandum|circular)\b/.test(lower)) {
+        return { type: 'office_memo', label: 'Office Memorandum' };
+    }
+    if (/\b(mom|minutes|meeting minutes|conference minutes)\b/.test(lower)) {
+        return { type: 'meeting_minutes', label: 'Minutes of Meeting' };
+    }
+    if (/\b(note sheet|office note|file note)\b/.test(lower)) {
+        return { type: 'office_note', label: 'Office Note / Note Sheet' };
+    }
+    if (/\b(order|office order|promulgate|promulgation)\b/.test(lower)) {
+        return { type: 'office_order', label: 'Office Order' };
+    }
+    if (/\b(technical report|trial report|evaluation report)\b/.test(lower)) {
+        return { type: 'technical_report', label: 'Technical Report' };
+    }
+    return null;
+}
+
 /**
  * Air-Gapped Ollama ChatGPT Client Application
  * 100% Self-Contained Offline JavaScript
@@ -454,6 +483,27 @@ async function sendMessage() {
         // Final render check
         bubbleTarget.innerHTML = renderMarkdownText(accumulatedText);
         bubbleTarget.dataset.raw = accumulatedText;
+
+        // Bridge: Offer one-click Document Formulation Studio if prompt contains document intent
+        const detectedDoc = detectDocumentIntent(prompt);
+        if (detectedDoc && !bubbleTarget.parentElement.querySelector('.chat-doc-suggestion-card')) {
+            const safePrompt = prompt.replace(/'/g, "\\'").replace(/"/g, '&quot;');
+            const suggestionCard = document.createElement('div');
+            suggestionCard.className = 'chat-doc-suggestion-card';
+            suggestionCard.style.cssText = 'margin-top: 10px; padding: 10px 14px; background: rgba(15, 23, 42, 0.9); border: 1px solid #3b82f6; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px;';
+            suggestionCard.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <div style="width: 28px; height: 28px; border-radius: 6px; background: #1e3a8a; display: flex; align-items: center; justify-content: center; font-size: 14px;">📄</div>
+                    <div>
+                        <div style="font-size: 0.82rem; font-weight: 600; color: #f8fafc;">Military Document Archetype: ${escapeHtml(detectedDoc.label)}</div>
+                        <div style="font-size: 0.72rem; color: #94a3b8;">Format, digitally sign, and export authentic A4 DOCX/PDF with AES-256.</div>
+                    </div>
+                </div>
+                <button type="button" onclick="startDocumentCreation('${detectedDoc.type}', '${safePrompt}')" class="btn-sec-unlock" style="padding: 6px 14px; font-size: 0.75rem; white-space: nowrap; cursor: pointer;">Open Studio</button>
+            `;
+            bubbleTarget.parentElement.appendChild(suggestionCard);
+            scrollToBottom();
+        }
 
     } catch (err) {
         if (err.name === 'AbortError') {
