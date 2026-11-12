@@ -3966,3 +3966,184 @@ body {
 .form-control:focus {
   border-color: var(--cme-maroon);
 }
+
+/* ==========================================================================
+   V3.8 Features: Signature Asset Bank, PDF Preview, Finalize, Toast
+   ========================================================================== */
+
+/* Signature Assets Manager */
+.sig-asset-card {
+  position: relative;
+  border: 1px solid #334155;
+  border-radius: 6px;
+  padding: 8px 10px;
+  background: #0b1329;
+  min-width: 110px;
+  max-width: 140px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.15s ease;
+}
+
+.sig-asset-card:hover {
+  border-color: #64748b;
+  transform: translateY(-1px);
+}
+
+.sig-asset-default {
+  border-color: #22c55e !important;
+  background: rgba(34, 197, 94, 0.08) !important;
+}
+
+.sig-asset-img {
+  height: 38px;
+  max-width: 110px;
+  object-fit: contain;
+  display: block;
+}
+
+.sig-asset-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #94a3b8;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sig-asset-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+  width: 100%;
+  justify-content: center;
+}
+
+.btn-sig-action {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: 1px solid #475569;
+  background: #1e293b;
+  color: #94a3b8;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.btn-sig-action:hover {
+  background: #334155;
+  color: #f8fafc;
+}
+
+.btn-sig-delete {
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #ef4444;
+}
+
+.btn-sig-delete:hover {
+  background: rgba(239, 68, 68, 0.2);
+  color: #fca5a5;
+}
+
+.sec-btn-outline {
+  border: 1px dashed #475569;
+  background: #1e293b;
+  color: #94a3b8;
+  transition: all 0.15s ease;
+}
+
+.sec-btn-outline:hover {
+  border-color: #94a3b8;
+  color: #f1f5f9;
+  background: #334155;
+}
+
+/* Studio Finalize & PDF Preview Buttons */
+.btn-studio-final {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #94a3b8;
+  transition: all 0.15s ease;
+}
+
+.btn-studio-final:hover {
+  border-color: #64748b;
+  color: #f8fafc;
+}
+
+.btn-studio-final.is-finalized {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.12);
+  color: #4ade80;
+}
+
+.btn-studio-preview-pdf {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 13px;
+  border-radius: 5px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #cbd5e1;
+  transition: all 0.15s ease;
+}
+
+.btn-studio-preview-pdf:hover {
+  background: #1e293b;
+  border-color: #64748b;
+  color: #ffffff;
+}
+
+/* Toast Notifications */
+#sarvatraToast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 10000;
+  padding: 10px 18px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: #ffffff;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  animation: toastFadeIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+#sarvatraToast.toast-success {
+  background: #065f46;
+  border: 1px solid #059669;
+}
+
+#sarvatraToast.toast-error {
+  background: #7f1d1d;
+  border: 1px solid #b91c1c;
+}
+
+#sarvatraToast.toast-info {
+  background: #1e293b;
+  border: 1px solid #3b82f6;
+}
+
+@keyframes toastFadeIn {
+  from { opacity: 0; transform: translateY(12px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}

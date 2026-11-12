@@ -74,7 +74,7 @@ def build_office_note(fields, body_content):
         from_appointment=from_appointment,
         from_authority=from_authority,
         date_str=date_str,
-        signature_style=signature_style
+        signature_style=signature_style, signature_image_path=fields.get('_signature_image_path')
     )
 
     # 6. Bottom Classification Stamp
@@ -140,7 +140,7 @@ def build_office_order(fields, body_content):
         from_appointment=from_appointment,
         from_authority=from_authority,
         date_str=date_str,
-        signature_style=signature_style
+        signature_style=signature_style, signature_image_path=fields.get('_signature_image_path')
     )
 
     # 7. Distribution List (if provided)
@@ -233,7 +233,7 @@ def build_technical_report(fields, body_content):
         from_appointment=from_appointment,
         from_authority=from_authority,
         date_str=date_str,
-        signature_style=signature_style
+        signature_style=signature_style, signature_image_path=fields.get('_signature_image_path')
     )
 
     # 7. Bottom Classification Stamp

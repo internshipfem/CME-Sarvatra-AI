@@ -35,6 +35,27 @@ def create_or_update_user_profile(sender, instance, created, **kwargs):
             UserProfile.objects.create(user=instance)
 
 
+class SignatureAsset(models.Model):
+    """Stores uploaded signature image files for an officer."""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='signatures')
+    label = models.CharField(max_length=100, default='My Signature')  # e.g., "Formal Signature", "Initials", "Stamp"
+    image = models.ImageField(upload_to='signatures/%Y/%m/')
+    is_default = models.BooleanField(default=False)
+    uploaded_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-is_default', '-uploaded_at']
+
+    def __str__(self):
+        return f"{self.label} ({self.user.username})"
+
+    def save(self, *args, **kwargs):
+        if self.is_default:
+            SignatureAsset.objects.filter(user=self.user, is_default=True).exclude(pk=self.pk).update(is_default=False)
+        super().save(*args, **kwargs)
+
+
 class Conversation(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='conversations')
@@ -136,6 +157,8 @@ class GeneratedDocument(models.Model):
     pin_hash = models.CharField(max_length=128, blank=True, default='')
     lock_hint = models.CharField(max_length=100, blank=True, default='')
     encrypt_export = models.BooleanField(default=False)
+    is_final = models.BooleanField(default=False)
+    signature_asset = models.ForeignKey('SignatureAsset', on_delete=models.SET_NULL, null=True, blank=True, related_name='documents')
 
     created_at = models.DateTimeField(auto_now_add=True)
 

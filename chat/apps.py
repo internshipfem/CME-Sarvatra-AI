@@ -1,11 +1,12 @@
 from django.apps import AppConfig
 from django.db.models.signals import post_migrate
+from django.db.backends.signals import connection_created
 
 
 def ensure_default_superuser():
     """
     Automatically creates the default superuser (admin / admin)
-    if not already present when the app is launched.
+    if not already present when migrations complete.
     """
     try:
         from django.db import connection
@@ -25,12 +26,20 @@ def ensure_default_superuser():
                 profile.save()
                 print("[Init] Default superuser 'admin' created with password 'admin' (EMP-001).")
     except Exception:
-        # Ignore if migrations haven't run yet
         pass
 
 
 def on_post_migrate(sender, **kwargs):
     ensure_default_superuser()
+
+
+def on_connection_created(sender, connection, **kwargs):
+    if connection.vendor == 'sqlite':
+        try:
+            with connection.cursor() as cursor:
+                cursor.execute('PRAGMA journal_mode=WAL;')
+        except Exception:
+            pass
 
 
 class ChatConfig(AppConfig):
@@ -39,4 +48,4 @@ class ChatConfig(AppConfig):
 
     def ready(self):
         post_migrate.connect(on_post_migrate, sender=self)
-        ensure_default_superuser()
+        connection_created.connect(on_connection_created)

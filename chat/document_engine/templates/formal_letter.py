@@ -124,7 +124,7 @@ def build_formal_letter(fields, body_content):
         encl=enclosures,
         cc=cc,
         date_str=date_str,
-        signature_style=signature_style
+        signature_style=signature_style, signature_image_path=fields.get('_signature_image_path')
     )
 
     # 9. Bottom Classification Stamp

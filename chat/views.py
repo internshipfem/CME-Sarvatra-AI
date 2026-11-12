@@ -459,6 +459,14 @@ def generate_document_api(request):
     if conversation_id:
         conversation = Conversation.objects.filter(id=conversation_id, user=request.user).first()
 
+    # Process selected signature asset
+    sig_id = data.get('signature_asset_id', '').strip()
+    if sig_id:
+        collected_fields['_signature_asset_id'] = sig_id
+    elif data.get('no_signature'):
+        collected_fields['_signature_asset_id'] = 'none'
+        collected_fields['_no_signature'] = True
+
     session_data = {
         'doc_type': doc_type,
         'collected_fields': collected_fields,
@@ -662,6 +670,19 @@ def download_pdf_api(request, document_id):
     except Exception:
         fields = {}
 
+    # Attach draft status & signature image path
+    fields['_is_draft'] = not doc.is_final
+    if doc.signature_asset and doc.signature_asset.image and os.path.exists(doc.signature_asset.image.path):
+        fields['_signature_image_path'] = doc.signature_asset.image.path
+    elif fields.get('_signature_asset_id') and fields['_signature_asset_id'] != 'none':
+        try:
+            from chat.models import SignatureAsset
+            sig = SignatureAsset.objects.get(id=fields['_signature_asset_id'], user=request.user)
+            if sig.image and os.path.exists(sig.image.path):
+                fields['_signature_image_path'] = sig.image.path
+        except Exception:
+            pass
+
     import re
     from chat.document_engine.pdf_builder import build_pdf_document
 
@@ -679,7 +700,9 @@ def download_pdf_api(request, document_id):
     filename = f"{clean_title}.pdf"
 
     response = HttpResponse(pdf_bytes, content_type='application/pdf')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    is_inline = request.GET.get('preview') in ('1', 'true') or request.GET.get('inline') in ('1', 'true')
+    disposition = 'inline' if is_inline else 'attachment'
+    response['Content-Disposition'] = f'{disposition}; filename="{filename}"'
     return response
 
 
@@ -730,8 +753,21 @@ def toggle_document_lock_api(request, document_id):
 @login_required
 @require_POST
 def verify_document_pin_api(request, document_id):
-    """Verify PIN for locked document access."""
+    """Verify PIN for locked document access. Locks out for 5 minutes after 5 failed attempts."""
     doc = get_object_or_404(GeneratedDocument, id=document_id, user=request.user)
+
+    fail_key = f'pin_fails_{document_id}'
+    lockout_key = f'pin_lockout_{document_id}'
+
+    lockout_until = request.session.get(lockout_key, 0)
+    now_ts = time.time()
+    if lockout_until and now_ts < lockout_until:
+        remaining = int((lockout_until - now_ts) / 60) + 1
+        return JsonResponse(
+            {'error': f'Too many incorrect attempts. Security lockout active. Try again in {remaining} minute(s).'},
+            status=429
+        )
+
     try:
         data = json.loads(request.body.decode('utf-8'))
     except Exception:
@@ -739,8 +775,23 @@ def verify_document_pin_api(request, document_id):
 
     pin = data.get('pin', '').strip()
     if not doc.check_lock_pin(pin):
-        return JsonResponse({'error': 'Incorrect Security PIN. Access denied.'}, status=403)
+        fails = request.session.get(fail_key, 0) + 1
+        request.session[fail_key] = fails
+        if fails >= 5:
+            request.session[lockout_key] = time.time() + 300  # 5 minutes
+            request.session[fail_key] = 0
+            return JsonResponse(
+                {'error': 'Too many incorrect attempts. Document locked for 5 minutes for security protection.'},
+                status=429
+            )
+        return JsonResponse(
+            {'error': f'Incorrect Security PIN. Access denied. ({fails}/5 attempts)'},
+            status=403
+        )
 
+    # Success — clear counters
+    request.session.pop(fail_key, None)
+    request.session.pop(lockout_key, None)
     request.session[f'unlocked_doc_{doc.id}'] = True
 
     try:
@@ -761,6 +812,8 @@ def verify_document_pin_api(request, document_id):
             'file_size': doc.format_size(),
             'is_locked': doc.is_locked,
             'lock_hint': doc.lock_hint,
+            'is_final': doc.is_final,
+            'signature_asset_id': str(doc.signature_asset_id) if doc.signature_asset_id else '',
             'encrypt_export': doc.encrypt_export,
             'download_url': f"/api/documents/{doc.id}/download/?pin={pin}&decrypted=1",
             'pdf_download_url': f"/api/documents/{doc.id}/pdf/?pin={pin}&decrypted=1",
@@ -812,6 +865,8 @@ def get_document_detail_api(request, document_id):
             'file_size': doc.format_size(),
             'is_locked': doc.is_locked,
             'lock_hint': doc.lock_hint,
+            'is_final': doc.is_final,
+            'signature_asset_id': str(doc.signature_asset_id) if doc.signature_asset_id else '',
             'encrypt_export': doc.encrypt_export,
             'download_url': f"/api/documents/{doc.id}/download/",
             'pdf_download_url': f"/api/documents/{doc.id}/pdf/",
@@ -836,6 +891,7 @@ def list_user_documents_api(request):
             'model_used': d.model_used,
             'is_locked': d.is_locked,
             'lock_hint': d.lock_hint,
+            'is_final': d.is_final,
             'encrypt_export': d.encrypt_export,
             'created_at': d.created_at.strftime('%d %b %Y %H:%M'),
             'download_url': f"/api/documents/{d.id}/download/",
@@ -900,4 +956,121 @@ def update_profile_api(request):
             'signature_style': profile.signature_style,
             'signature_text': profile.signature_text,
         }
+    })
+
+
+# ==============================================================================
+# Signature Asset Management & Document Finalization APIs
+# ==============================================================================
+
+@login_required
+@require_POST
+def upload_signature_api(request):
+    """Upload a signature image for the officer profile."""
+    image_file = request.FILES.get('signature_image')
+    if not image_file:
+        return JsonResponse({'error': 'No image file provided'}, status=400)
+
+    allowed_types = ['image/png', 'image/jpeg', 'image/jpg']
+    if image_file.content_type not in allowed_types:
+        return JsonResponse({'error': 'Only PNG and JPG files are supported'}, status=400)
+
+    if image_file.size > 2 * 1024 * 1024:
+        return JsonResponse({'error': 'Signature image must be under 2 MB'}, status=400)
+
+    from .models import SignatureAsset
+    label = request.POST.get('label', 'My Signature').strip() or 'My Signature'
+    is_default = request.POST.get('is_default', 'false').lower() in ('true', '1')
+
+    # If first signature, auto set as default
+    if not SignatureAsset.objects.filter(user=request.user).exists():
+        is_default = True
+
+    sig = SignatureAsset.objects.create(
+        user=request.user,
+        label=label,
+        image=image_file,
+        is_default=is_default,
+    )
+
+    return JsonResponse({
+        'status': 'ok',
+        'signature': {
+            'id': str(sig.id),
+            'label': sig.label,
+            'is_default': sig.is_default,
+            'url': sig.image.url,
+            'uploaded_at': sig.uploaded_at.strftime('%d %b %Y'),
+        }
+    })
+
+
+@login_required
+@require_GET
+def list_signatures_api(request):
+    """List all signature assets for the current user."""
+    from .models import SignatureAsset
+    sigs = SignatureAsset.objects.filter(user=request.user)
+    return JsonResponse({
+        'signatures': [
+            {
+                'id': str(s.id),
+                'label': s.label,
+                'is_default': s.is_default,
+                'url': s.image.url,
+                'uploaded_at': s.uploaded_at.strftime('%d %b %Y'),
+            }
+            for s in sigs
+        ]
+    })
+
+
+@login_required
+@require_POST
+def delete_signature_api(request, signature_id):
+    """Delete a signature asset."""
+    from .models import SignatureAsset
+    sig = get_object_or_404(SignatureAsset, id=signature_id, user=request.user)
+    if sig.image and os.path.exists(sig.image.path):
+        try:
+            os.remove(sig.image.path)
+        except Exception:
+            pass
+    sig.delete()
+    return JsonResponse({'status': 'ok'})
+
+
+@login_required
+@require_POST
+def set_default_signature_api(request, signature_id):
+    """Set a signature asset as the user's default."""
+    from .models import SignatureAsset
+    sig = get_object_or_404(SignatureAsset, id=signature_id, user=request.user)
+    SignatureAsset.objects.filter(user=request.user, is_default=True).update(is_default=False)
+    sig.is_default = True
+    sig.save(update_fields=['is_default'])
+    return JsonResponse({'status': 'ok', 'id': str(sig.id)})
+
+
+@login_required
+@require_POST
+def toggle_document_final_api(request, document_id):
+    """Toggle draft vs finalized status for a document."""
+    doc = get_object_or_404(GeneratedDocument, id=document_id, user=request.user)
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = {}
+
+    if 'is_final' in data:
+        doc.is_final = bool(data['is_final'])
+    else:
+        doc.is_final = not doc.is_final
+
+    doc.save(update_fields=['is_final'])
+    return JsonResponse({
+        'status': 'ok',
+        'document_id': str(doc.id),
+        'is_final': doc.is_final,
+        'message': 'Document marked as FINAL (DRAFT watermark removed).' if doc.is_final else 'Document marked as DRAFT.'
     })

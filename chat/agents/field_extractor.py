@@ -38,6 +38,12 @@ REQUIRED_FIELDS = {
         'title': {'label': 'Report Title', 'prompt': 'What is the title of this report?'},
         'key_points': {'label': 'Sections & Content', 'prompt': 'What topics/sections should the report cover?'},
     },
+    'leave_application': {
+        'leave_type': {'label': 'Leave Type', 'prompt': 'What type of leave? (Casual Leave / Annual Leave / Station Leave)'},
+        'from_date': {'label': 'From Date', 'prompt': 'From which date? (DD MMM YYYY)'},
+        'to_date': {'label': 'To Date', 'prompt': 'To which date? (DD MMM YYYY)'},
+        'key_points': {'label': 'Reason for Leave', 'prompt': 'State the reason for proceeding on leave.'},
+    },
 }
 
 # Optional fields per document type
@@ -62,6 +68,10 @@ OPTIONAL_FIELDS = {
     },
     'technical_report': {
         'abstract': {'label': 'Abstract/Summary', 'prompt': 'Brief abstract? (or let AI generate)'},
+    },
+    'leave_application': {
+        'station_address': {'label': 'Station / Contact Address During Leave', 'prompt': 'Address or contact during leave? (or skip)'},
+        'relieving_officer': {'label': 'Relieving / Handover Officer', 'prompt': 'Name of relieving officer? (or skip)'},
     },
 }
 

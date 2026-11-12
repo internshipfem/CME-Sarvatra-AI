@@ -1,3 +1,5 @@
+import os
+import base64
 """
 PDF Builder — Doctrinal Indian Army A4 Military Stationery PDF Generator with AES-256 Encryption.
 Supports all 6 military document archetypes:
@@ -43,9 +45,20 @@ def _clean_subject(raw_subject):
     return s.upper() or 'OFFICIAL MATTER'
 
 
-def _build_digital_signature_box_html(from_name, from_rank, from_appointment, from_authority, date_str, dept='', signature_style='military', station=''):
+def _build_digital_signature_box_html(from_name, from_rank, from_appointment, from_authority, date_str, dept='', signature_style='military', station='', signature_image_path=None):
     role_parts = [p.strip() for p in [from_rank, from_appointment] if p and p.strip()]
     role_line = ', '.join(role_parts)
+
+    sig_img_html = ''
+    if signature_image_path and os.path.exists(signature_image_path):
+        try:
+            with open(signature_image_path, 'rb') as f:
+                b64 = base64.b64encode(f.read()).decode('utf-8')
+            ext = signature_image_path.rsplit('.', 1)[-1].lower()
+            mime = 'image/png' if ext == 'png' else 'image/jpeg'
+            sig_img_html = f'<div style="text-align: right; margin-bottom: 3px;"><img src="data:{mime};base64,{b64}" style="height: 36pt; max-width: 140pt; object-fit: contain;" /></div>'
+        except Exception:
+            sig_img_html = ''
 
     auth_line_html = ''
     if from_authority and from_authority.strip():
@@ -62,6 +75,7 @@ def _build_digital_signature_box_html(from_name, from_rank, from_appointment, fr
             <div style="font-weight: bold; font-size: 7.5pt; color: #0f172a; border-bottom: 1px solid #cbd5e1; padding-bottom: 3px; margin-bottom: 4px; text-align: center;">
                 DIGITALLY SIGNED CERTIFICATE (DSC)
             </div>
+            {sig_img_html}
             <div><strong>Signed by:</strong> {signer_line}</div>
             {f'<div><strong>Role:</strong> {role_line}</div>' if role_line else ''}
             {auth_line_html}
@@ -75,6 +89,7 @@ def _build_digital_signature_box_html(from_name, from_rank, from_appointment, fr
     role_line_html = f'<div style="font-size: 9.5pt; color: #1e293b; margin-top: 2px;">{role_line}</div>' if role_line else ''
     return f'''
     <div style="text-align: right; font-family: Arial, Helvetica, sans-serif; line-height: 1.4;">
+        {sig_img_html}
         <div style="font-weight: bold; font-size: 10pt; color: #0f172a;">{signer_line}</div>
         {role_line_html}
         {auth_line_html}
@@ -159,7 +174,7 @@ def _build_formal_letter_html(fields, body_content, classification):
                     {f'<div style="font-size: 8.5pt; color: #475569; margin-top: 4px;">Copy to: {cc}</div>' if cc else ''}
                 </td>
                 <td style="width: 50%; text-align: right; vertical-align: bottom;">
-                    {_build_digital_signature_box_html(from_name, from_rank, from_appointment, from_authority, date_str, from_dept, signature_style=fields.get('signature_style', 'military'), station=station)}
+                    {_build_digital_signature_box_html(from_name, from_rank, from_appointment, from_authority, date_str, from_dept, signature_style=fields.get('signature_style', 'military'), station=station, signature_image_path=fields.get('_signature_image_path'))}
                 </td>
             </tr>
         </table>
@@ -214,7 +229,7 @@ def _build_office_memo_html(fields, body_content, classification):
     {action_html}
 
     <div style="margin-top: 26px; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; text-align: right; page-break-inside: avoid;">
-        {_build_digital_signature_box_html(from_name, from_rank, from_appointment, from_authority, date_str, from_dept, signature_style=fields.get('signature_style', 'military'), station=station)}
+        {_build_digital_signature_box_html(from_name, from_rank, from_appointment, from_authority, date_str, from_dept, signature_style=fields.get('signature_style', 'military'), station=station, signature_image_path=fields.get('_signature_image_path'))}
     </div>
     """
     return html_content
@@ -280,7 +295,7 @@ def _build_meeting_minutes_html(fields, body_content, classification):
     {next_html}
 
     <div style="margin-top: 26px; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; text-align: right; page-break-inside: avoid;">
-        {_build_digital_signature_box_html(from_name, from_rank, from_appointment, from_authority, date_str, from_dept, signature_style=fields.get('signature_style', 'military'), station=station)}
+        {_build_digital_signature_box_html(from_name, from_rank, from_appointment, from_authority, date_str, from_dept, signature_style=fields.get('signature_style', 'military'), station=station, signature_image_path=fields.get('_signature_image_path'))}
     </div>
     """
     return html_content
@@ -324,7 +339,7 @@ def _build_office_note_html(fields, body_content, classification):
     </div>
 
     <div style="margin-top: 26px; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; text-align: right; page-break-inside: avoid;">
-        {_build_digital_signature_box_html(from_name, from_rank, from_appointment, from_authority, date_str, from_dept, signature_style=fields.get('signature_style', 'military'), station=station)}
+        {_build_digital_signature_box_html(from_name, from_rank, from_appointment, from_authority, date_str, from_dept, signature_style=fields.get('signature_style', 'military'), station=station, signature_image_path=fields.get('_signature_image_path'))}
     </div>
     """
     return html_content
@@ -382,7 +397,7 @@ def _build_office_order_html(fields, body_content, classification):
     {eff_html}
 
     <div style="margin-top: 26px; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; text-align: right; page-break-inside: avoid;">
-        {_build_digital_signature_box_html(from_name, from_rank, from_appointment, from_authority, date_str, from_dept, signature_style=fields.get('signature_style', 'military'), station=station)}
+        {_build_digital_signature_box_html(from_name, from_rank, from_appointment, from_authority, date_str, from_dept, signature_style=fields.get('signature_style', 'military'), station=station, signature_image_path=fields.get('_signature_image_path'))}
     </div>
 
     {dist_html}
@@ -434,13 +449,81 @@ def _build_technical_report_html(fields, body_content, classification):
     </div>
 
     <div style="margin-top: 26px; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; text-align: right; page-break-inside: avoid;">
-        {_build_digital_signature_box_html(author, from_rank, from_appointment, from_authority, date_str, author_dept)}
+        {_build_digital_signature_box_html(author, from_rank, from_appointment, from_authority, date_str, author_dept, signature_style=fields.get('signature_style', 'military'), signature_image_path=fields.get('_signature_image_path'))}
     </div>
     """
     return html_content
 
 
+
+def _build_leave_application_html(fields, body_content, classification):
+    ref_no = _escape(fields.get('reference_number') or 'CME/LEAVE/2026/0001')
+    date_str = _escape(fields.get('date') or '')
+    to_name = _escape(fields.get('to_name') or 'The Commandant,<br/>College of Military Engineering,<br/>Dapodi, Pune – 411031')
+    leave_type = _escape(fields.get('leave_type') or 'CASUAL LEAVE')
+    subject = _clean_subject(fields.get('subject') or f"APPLICATION FOR {leave_type.upper()}")
+    from_name = _escape(fields.get('from_name') or '')
+    from_rank = _escape(fields.get('from_rank') or '')
+    from_appointment = _escape(fields.get('from_appointment') or '')
+    from_authority = _escape(fields.get('from_authority') or '')
+    from_dept = _escape(fields.get('from_department') or 'Combat Engineering Wing')
+    station = _escape(fields.get('station') or 'CME, Pune – 411031')
+    signature_style = fields.get('signature_style', 'military')
+    sig_img_path = fields.get('_signature_image_path')
+
+    body_html = _format_paragraphs(body_content)
+
+    return f"""
+    <div style="font-family: Arial, Helvetica, sans-serif; text-align: center; margin-top: 6px;">
+        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">COLLEGE OF MILITARY ENGINEERING</h1>
+        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">Dapodi, Pune – 411031 | Corps of Engineers</p>
+        <hr style="border: none; border-top: 1.5px solid #0f172a; margin: 6px 0 14px 0;" />
+    </div>
+
+    <table style="width: 100%; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; margin-bottom: 12px; border-collapse: collapse;">
+        <tr>
+            <td style="width: 50%; vertical-align: top; line-height: 1.45;">
+                <div>Tele: 020-27146000/2204</div>
+                <div><strong>Ref: {ref_no}</strong></div>
+            </td>
+            <td style="width: 50%; text-align: right; vertical-align: top; line-height: 1.45;">
+                <div>{from_dept}</div>
+                <div>{station}</div>
+                <div><strong>{date_str}</strong></div>
+            </td>
+        </tr>
+    </table>
+
+    <div style="font-family: Arial, Helvetica, sans-serif; font-size: 10pt; line-height: 1.45; margin-bottom: 12px;">
+        <strong>To,</strong><br/>
+        {to_name}
+    </div>
+
+    <div style="font-family: Arial, Helvetica, sans-serif; font-size: 10.5pt; margin: 12px 0; line-height: 1.4;">
+        <strong>SUBJECT:</strong> <u>{subject}</u>
+    </div>
+
+    <div style="font-family: Georgia, 'Times New Roman', serif; font-size: 10.5pt; line-height: 1.55; color: #0f172a;">
+        <p style="margin-bottom: 10px;">Sir,</p>
+        {body_html}
+    </div>
+
+    <div style="margin-top: 24px; font-family: Arial, Helvetica, sans-serif; font-size: 9.5pt; page-break-inside: avoid;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <tr>
+                <td style="width: 50%; vertical-align: bottom;">
+                    <div style="font-size: 8.5pt; color: #475569;">Copy to: Head of Department ({from_dept})</div>
+                </td>
+                <td style="width: 50%; text-align: right; vertical-align: bottom;">
+                    {_build_digital_signature_box_html(from_name, from_rank, from_appointment, from_authority, date_str, from_dept, signature_style=signature_style, station=station, signature_image_path=sig_img_path)}
+                </td>
+            </tr>
+        </table>
+    </div>
+    """
+
 HTML_BUILDERS = {
+    'leave_application': _build_leave_application_html,
     'formal_letter': _build_formal_letter_html,
     'office_memo': _build_office_memo_html,
     'meeting_minutes': _build_meeting_minutes_html,
@@ -475,6 +558,18 @@ def build_pdf_document(doc_type, fields, body_content, passcode=None):
     total_pages = doc.page_count
 
     for i, page in enumerate(doc):
+        # Subtle diagonal DRAFT watermark unless explicitly finalized
+        is_draft = fields.get('_is_draft', True) and not fields.get('is_final', False)
+        if is_draft:
+            point = fitz.Point(140, 520)
+            page.insert_text(
+                point,
+                "DRAFT",
+                fontsize=95,
+                fontname="helv",
+                color=(0.91, 0.91, 0.91),
+                morph=(point, fitz.Matrix(45))
+            )
         if has_classification:
             # 1. Top Classification Box & Text
             top_box = fitz.Rect(210, 18, 385, 34)

@@ -12,6 +12,7 @@ from .templates.extended_templates import (
     build_office_order,
     build_technical_report,
 )
+from .templates.leave_application import build_leave_application
 
 BUILDERS = {
     'formal_letter': build_formal_letter,
@@ -20,6 +21,7 @@ BUILDERS = {
     'office_note': build_office_note,
     'office_order': build_office_order,
     'technical_report': build_technical_report,
+    'leave_application': build_leave_application,
 }
 
 

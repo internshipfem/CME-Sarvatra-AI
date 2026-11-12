@@ -1,3 +1,4 @@
+import os
 """
 Orchestrator — coordinates the full document creation flow.
 detect → collect fields → generate content → build DOCX → save to DB
@@ -124,6 +125,26 @@ def create_document(user, session_data, model_name=None, conversation=None):
     if 'subject' in fields:
         fields['subject'] = clean_subject(fields['subject'])
 
+    # Step 0: Resolve digital signature asset image
+    sig_asset_id = fields.get('_signature_asset_id')
+    sig_asset = None
+    if sig_asset_id and sig_asset_id != 'none':
+        try:
+            from ..models import SignatureAsset
+            sig_asset = SignatureAsset.objects.get(id=sig_asset_id, user=user)
+            if sig_asset.image and os.path.exists(sig_asset.image.path):
+                fields['_signature_image_path'] = sig_asset.image.path
+        except Exception:
+            pass
+    elif not fields.get('_no_signature'):
+        try:
+            from ..models import SignatureAsset
+            sig_asset = SignatureAsset.objects.filter(user=user, is_default=True).first()
+            if sig_asset and sig_asset.image and os.path.exists(sig_asset.image.path):
+                fields['_signature_image_path'] = sig_asset.image.path
+        except Exception:
+            pass
+
     # Step 1: Generate content via LLM (or smart military naturalizer fallback)
     result = generate_content(doc_type, fields, model_name=model_name)
     generated_text = result['content']
@@ -145,6 +166,7 @@ def create_document(user, session_data, model_name=None, conversation=None):
         model_used=result['model'],
         generation_time=result['generation_time'],
         file_size=len(docx_bytes),
+        signature_asset=sig_asset,
     )
     doc.file.save(filename, ContentFile(docx_bytes), save=True)
 
@@ -162,6 +184,7 @@ def create_document(user, session_data, model_name=None, conversation=None):
         'is_locked': doc.is_locked,
         'lock_hint': doc.lock_hint,
         'encrypt_export': doc.encrypt_export,
+        'is_final': doc.is_final,
         'download_url': f"/api/documents/{doc.id}/download/",
         'pdf_download_url': f"/api/documents/{doc.id}/pdf/",
     }
@@ -212,6 +235,8 @@ def revise_document(document_id, revision_instruction, user):
         pin_hash=original.pin_hash,
         lock_hint=original.lock_hint,
         encrypt_export=original.encrypt_export,
+        is_final=original.is_final,
+        signature_asset=original.signature_asset,
     )
     doc.file.save(filename, ContentFile(docx_bytes), save=True)
 
@@ -229,6 +254,7 @@ def revise_document(document_id, revision_instruction, user):
         'is_locked': doc.is_locked,
         'lock_hint': doc.lock_hint,
         'encrypt_export': doc.encrypt_export,
+        'is_final': doc.is_final,
         'download_url': f"/api/documents/{doc.id}/download/",
         'pdf_download_url': f"/api/documents/{doc.id}/pdf/",
     }

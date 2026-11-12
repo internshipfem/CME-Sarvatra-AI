@@ -144,6 +144,26 @@ def generate_fallback_paragraphs(doc_type, fields):
             f"{len(paragraphs) + 1}. Recommendation: Put up for favorable consideration and sanction of the competent authority, please."
         )
 
+    elif doc_type == 'leave_application':
+        leave_type = fields.get('leave_type') or 'Casual Leave'
+        from_date = fields.get('from_date') or fields.get('date') or 'the requested date'
+        to_date = fields.get('to_date') or 'the designated date'
+        reason = fields.get('key_points') or 'urgent personal and family obligations'
+
+        paragraphs.append(
+            f"1. It is respectfully submitted that the undersigned wishes to proceed on {leave_type} "
+            f"with effect from {from_date} to {to_date} (both days inclusive)."
+        )
+        paragraphs.append(
+            f"2. The purpose of proceeding on leave is: {naturalize_military_sentence(reason)}"
+        )
+        paragraphs.append(
+            "3. It is confirmed that all pending staff duties and urgent correspondence have been cleared or handed over to the designated relieving officer."
+        )
+        paragraphs.append(
+            "4. In view of the above, it is requested that necessary sanction for the aforementioned leave may kindly be accorded, please."
+        )
+
     else:
         # Default / Office Order / Technical Report
         paragraphs.append(
@@ -158,6 +178,81 @@ def generate_fallback_paragraphs(doc_type, fields):
         )
 
     return "\n\n".join(paragraphs)
+
+
+def _apply_offline_revision(original_content, instruction):
+    """
+    Rule-based offline revision engine. Handles the most common military document
+    revision requests without requiring Ollama connectivity.
+    """
+    if not instruction:
+        return original_content
+
+    inst_lower = instruction.lower().strip()
+
+    # 1. Date change
+    date_match = re.search(
+        r'(?:change|update|set|make)\s+(?:the\s+)?date\s+(?:to\s+)?([0-9]{1,2}\s+\w+\s+[0-9]{4}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4})',
+        inst_lower
+    )
+    if date_match:
+        new_date = date_match.group(1).title()
+        revised = re.sub(
+            r'\b\d{1,2}\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{4}\b',
+            new_date, original_content, flags=re.IGNORECASE
+        )
+        if revised != original_content:
+            return revised
+
+    # 2. Make shorter / concise
+    if any(k in inst_lower for k in ['shorter', 'concise', 'brief', 'trim', 'reduce', 'condense']):
+        paras = [p.strip() for p in original_content.split('\n\n') if p.strip()]
+        if len(paras) > 3:
+            kept = [paras[0]] + paras[2:-1:2] + [paras[-1]]
+            # Re-index paragraphs cleanly
+            reindexed = []
+            for i, p in enumerate(kept, 1):
+                clean_p = re.sub(r'^\d+\.\s*', '', p)
+                reindexed.append(f"{i}. {clean_p}")
+            return '\n\n'.join(reindexed)
+
+    # 3. Make more formal / authoritative
+    if any(k in inst_lower for k in ['formal', 'authoritative', 'official', 'strict']):
+        revised = original_content
+        informal_map = {
+            'we need': 'it is essential',
+            'we want': 'it is desired',
+            'please': 'it is requested that',
+            'asap': 'with immediate effect',
+            'as soon as possible': 'at the earliest',
+            "don't": 'shall not',
+            'can not': 'cannot',
+            'tell us': 'intimate this Headquarters',
+        }
+        for informal, formal in informal_map.items():
+            revised = re.sub(r'\b' + re.escape(informal) + r'\b', formal, revised, flags=re.IGNORECASE)
+        return revised
+
+    # 4. Add a paragraph regarding topic
+    add_match = re.search(r'add\s+(?:a\s+)?(?:para(?:graph)?\s+(?:about|on|regarding)\s+)?(.+)', instruction, flags=re.IGNORECASE)
+    if add_match and len(instruction.strip()) > 6:
+        topic = add_match.group(1).strip().rstrip('.')
+        paras = [p.strip() for p in original_content.split('\n\n') if p.strip()]
+        para_num = len(paras) + 1
+        new_para = (
+            f"{para_num}. It is further submitted that due consideration has been given to {topic}. "
+            f"Necessary action in this regard shall be initiated in accordance with standing operating procedures."
+        )
+        return original_content + '\n\n' + new_para
+
+    # 5. Default amendment append
+    paras = [p.strip() for p in original_content.split('\n\n') if p.strip()]
+    para_num = len(paras) + 1
+    clean_inst = instruction.strip().rstrip('.')
+    return (
+        original_content + '\n\n'
+        f"{para_num}. Amendment: {clean_inst[0].upper() + clean_inst[1:]}."
+    )
 
 
 def generate_content(doc_type, fields, model_name=None):
@@ -197,7 +292,7 @@ def generate_content(doc_type, fields, model_name=None):
             model=model_name,
             messages=messages,
             system_prompt=SYSTEM_PROMPT,
-            temperature=0.5,
+            temperature=0.3,
         ):
             chunk = item.get('chunk', '')
             if chunk:
@@ -236,11 +331,7 @@ def revise_content(original_content, revision_instruction, model_name=None):
         model_name = models[0] if models else 'llama3:latest'
 
     if not ollama_client.check_health():
-        # Clean revision append
-        revised = (
-            f"{original_content}\n\n"
-            f"[Revision noted: {revision_instruction.strip()}]"
-        )
+        revised = _apply_offline_revision(original_content, revision_instruction)
         return {
             'content': revised,
             'model': f"{model_name} (military engine)",
@@ -260,7 +351,7 @@ def revise_content(original_content, revision_instruction, model_name=None):
             model=model_name,
             messages=messages,
             system_prompt=SYSTEM_PROMPT,
-            temperature=0.5,
+            temperature=0.3,
         ):
             chunk = item.get('chunk', '')
             if chunk:
@@ -275,7 +366,7 @@ def revise_content(original_content, revision_instruction, model_name=None):
     content = ''.join(full_response).strip()
 
     if not content or content.startswith('[Error communicating with Ollama'):
-        content = f"{original_content}\n\n[Revision applied: {revision_instruction.strip()}]"
+        content = _apply_offline_revision(original_content, revision_instruction)
 
     logger.info(f"Revised content in {generation_time:.1f}s using {model_name}")
 

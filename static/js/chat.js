@@ -3377,3 +3377,360 @@ window.openSignatureQuickModal = openSignatureQuickModal;
 window.closeSignatureQuickModal = closeSignatureQuickModal;
 window.handleSaveQuickSignature = handleSaveQuickSignature;
 window.togglePreviewSigStyle = togglePreviewSigStyle;
+
+
+// ==============================================================================
+// V3.8 Enhancements: Toast, Signature Asset Bank, PDF Preview, Finalize & Shortcuts
+// ==============================================================================
+
+function showToast(message, type = 'success') {
+    const existing = document.getElementById('sarvatraToast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.id = 'sarvatraToast';
+    toast.className = `toast-${type}`;
+
+    let icon = '✓';
+    if (type === 'error') icon = '⚠';
+    else if (type === 'info') icon = 'ℹ';
+
+    toast.innerHTML = `<span style="font-weight:700;">${icon}</span> <span>${escapeHtml(message)}</span>`;
+    document.body.appendChild(toast);
+
+    setTimeout(() => {
+        if (toast && toast.parentNode) {
+            toast.style.transition = 'opacity 0.3s ease, transform 0.3s ease';
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(8px)';
+            setTimeout(() => toast.remove(), 320);
+        }
+    }, 2800);
+}
+
+let userSignatureAssets = [];
+let activeSignatureAssetId = '';
+
+async function loadSignatureAssets() {
+    try {
+        const resp = await fetch('/api/signatures/');
+        if (!resp.ok) return;
+        const data = await resp.json();
+        userSignatureAssets = data.signatures || [];
+        renderSignatureAssetsList(userSignatureAssets);
+        populateSignatureAssetDropdown(userSignatureAssets);
+    } catch (err) {
+        console.warn('Could not fetch signature assets:', err);
+    }
+}
+
+function renderSignatureAssetsList(sigs) {
+    const listEl = document.getElementById('sigAssetList');
+    if (!listEl) return;
+
+    if (!sigs.length) {
+        listEl.innerHTML = '<div style="font-size: 0.74rem; color: #64748b; padding: 6px 0;">No signature images uploaded yet. Upload a PNG file below.</div>';
+        return;
+    }
+
+    listEl.innerHTML = sigs.map(s => `
+        <div class="sig-asset-card ${s.is_default ? 'sig-asset-default' : ''}" data-id="${s.id}">
+            <img src="${s.url}" alt="${escapeHtml(s.label)}" class="sig-asset-img" />
+            <div class="sig-asset-label" title="${escapeHtml(s.label)}">${escapeHtml(s.label)}</div>
+            <div class="sig-asset-actions">
+                ${!s.is_default ? `<button type="button" class="btn-sig-action" onclick="setDefaultSig('${s.id}')" title="Set as default">Default</button>` : '<span style="font-size:0.68rem; color:#22c55e; font-weight:700;">✓ Default</span>'}
+                <button type="button" class="btn-sig-action btn-sig-delete" onclick="deleteSig('${s.id}')" title="Delete">Del</button>
+            </div>
+        </div>
+    `).join('');
+}
+
+function populateSignatureAssetDropdown(sigs) {
+    const sel = document.getElementById('doc_field_signature_asset');
+    if (!sel) return;
+
+    const currentVal = sel.value;
+    let opts = `
+        <option value="">Default Signature (From Profile)</option>
+        <option value="none">No Signature (Leave Blank for Physical Signing)</option>
+    `;
+
+    sigs.forEach(s => {
+        opts += `<option value="${s.id}">${escapeHtml(s.label)}${s.is_default ? ' (Default)' : ''}</option>`;
+    });
+
+    sel.innerHTML = opts;
+    if (currentVal) sel.value = currentVal;
+}
+
+async function handleSignatureFileUpload(event) {
+    const file = event.target.files && event.target.files[0];
+    if (!file) return;
+
+    const labelInput = document.getElementById('sigAssetLabelInput');
+    const label = (labelInput && labelInput.value.trim()) ? labelInput.value.trim() : 'Official Signature';
+
+    const fd = new FormData();
+    fd.append('signature_image', file);
+    fd.append('label', label);
+
+    try {
+        const resp = await fetch('/api/signatures/upload/', {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: fd
+        });
+        const data = await resp.json();
+        if (resp.ok && data.status === 'ok') {
+            showToast('Signature image uploaded successfully', 'success');
+            if (labelInput) labelInput.value = '';
+            event.target.value = '';
+            loadSignatureAssets();
+        } else {
+            showToast(data.error || 'Signature upload failed', 'error');
+        }
+    } catch (e) {
+        showToast('Signature upload error', 'error');
+    }
+}
+
+async function setDefaultSig(id) {
+    try {
+        const resp = await fetch(`/api/signatures/${id}/set-default/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        const data = await resp.json();
+        if (resp.ok && data.status === 'ok') {
+            showToast('Default signature updated', 'success');
+            loadSignatureAssets();
+        }
+    } catch (e) {
+        showToast('Failed to set default signature', 'error');
+    }
+}
+
+async function deleteSig(id) {
+    if (!confirm('Are you sure you want to remove this signature file?')) return;
+    try {
+        const resp = await fetch(`/api/signatures/${id}/delete/`, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCsrfToken()
+            }
+        });
+        const data = await resp.json();
+        if (resp.ok && data.status === 'ok') {
+            showToast('Signature removed', 'info');
+            loadSignatureAssets();
+        }
+    } catch (e) {
+        showToast('Failed to delete signature', 'error');
+    }
+}
+
+function onSignatureAssetChanged(val) {
+    activeSignatureAssetId = val;
+    const fields = extractPaperAllFields();
+    if (val === 'none') {
+        fields._signature_asset_id = 'none';
+        fields._no_signature = true;
+    } else {
+        fields._signature_asset_id = val;
+        fields._no_signature = false;
+    }
+
+    const container = document.getElementById('docPreviewContainer');
+    if (container) {
+        const dummyDoc = {
+            doc_type: currentDocType,
+            generated_content: extractPaperBodyText()
+        };
+        container.innerHTML = renderDocumentPaperPreview(dummyDoc, fields);
+        attachPaperEditListeners();
+    }
+    saveDocumentContentChanges();
+}
+
+// Document Finalize Toggle (DRAFT watermark remover)
+async function handleToggleFinalDoc() {
+    if (!currentGeneratedDocId) {
+        showToast('Generate a document first', 'info');
+        return;
+    }
+
+    try {
+        const resp = await fetch(`/api/documents/${currentGeneratedDocId}/toggle-final/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({})
+        });
+        const data = await resp.json();
+        if (resp.ok && data.status === 'ok') {
+            updateFinalizeButtonState(data.is_final);
+            showToast(data.message, 'success');
+        } else {
+            showToast(data.error || 'Could not toggle document status', 'error');
+        }
+    } catch (e) {
+        showToast('Error toggling document status', 'error');
+    }
+}
+
+function updateFinalizeButtonState(isFinal) {
+    const btn = document.getElementById('btnStudioFinal');
+    const txt = document.getElementById('btnStudioFinalText');
+    const icon = document.getElementById('btnStudioFinalIcon');
+    if (!btn) return;
+
+    if (isFinal) {
+        btn.classList.add('is-finalized');
+        if (txt) txt.textContent = 'Finalized';
+        if (icon) icon.textContent = '✓';
+        btn.title = 'Document is marked FINAL (No DRAFT watermark). Click to revert to Draft.';
+    } else {
+        btn.classList.remove('is-finalized');
+        if (txt) txt.textContent = 'Mark as Final';
+        if (icon) icon.textContent = '📝';
+        btn.title = 'Click to finalize document and remove DRAFT watermark on PDF.';
+    }
+}
+
+// Military PDF Preview Modal
+function openPdfPreview(pdfUrl, title = 'Military Document Preview') {
+    const modal = document.getElementById('pdfPreviewModal');
+    const frame = document.getElementById('pdfPreviewFrame');
+    const titleEl = document.getElementById('pdfPreviewTitle');
+    if (!modal || !frame) return;
+
+    if (titleEl) titleEl.textContent = title;
+    const separator = pdfUrl.includes('?') ? '&' : '?';
+    frame.src = `${pdfUrl}${separator}preview=1`;
+    modal.style.display = 'flex';
+}
+
+function closePdfPreview(e) {
+    if (e && e.target && e.target.id !== 'pdfPreviewModal' && !e.target.classList.contains('sec-modal-close')) {
+        return;
+    }
+    const modal = document.getElementById('pdfPreviewModal');
+    const frame = document.getElementById('pdfPreviewFrame');
+    if (modal) modal.style.display = 'none';
+    if (frame) frame.src = '';
+}
+
+function openActivePdfPreview() {
+    if (!currentGeneratedDocId) {
+        showToast('Please formulate or generate a document first', 'info');
+        return;
+    }
+    const docTitle = document.getElementById('docPaperSubj') ? document.getElementById('docPaperSubj').textContent.trim() : 'Official Document';
+    openPdfPreview(`/api/documents/${currentGeneratedDocId}/pdf/`, docTitle);
+}
+
+function printPdfFrame() {
+    const frame = document.getElementById('pdfPreviewFrame');
+    if (frame && frame.contentWindow) {
+        frame.contentWindow.focus();
+        frame.contentWindow.print();
+    }
+}
+
+// Global Keyboard Shortcuts
+document.addEventListener('keydown', function(e) {
+    // 1. Ctrl+Enter or Cmd+Enter -> Send message in chat or confirm in studio
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        const chatInput = document.getElementById('chatInput');
+        if (document.activeElement === chatInput) {
+            e.preventDefault();
+            const sendBtn = document.getElementById('sendBtn');
+            if (sendBtn) sendBtn.click();
+            return;
+        }
+        const studioRegen = document.getElementById('docRegenerateComment');
+        if (document.activeElement === studioRegen) {
+            e.preventDefault();
+            handleDocumentRegenerate();
+            return;
+        }
+    }
+
+    // 2. Ctrl+D or Cmd+D -> Toggle Document Studio
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'd' || e.key === 'D')) {
+        // Prevent browser bookmark shortcut
+        e.preventDefault();
+        const studioOverlay = document.getElementById('documentModalOverlay');
+        if (studioOverlay && studioOverlay.classList.contains('active')) {
+            closeDocumentModal();
+        } else {
+            openDocumentPickerModal();
+        }
+        return;
+    }
+
+    // 3. Escape -> Close highest active modal
+    if (e.key === 'Escape') {
+        const previewModal = document.getElementById('pdfPreviewModal');
+        if (previewModal && previewModal.style.display === 'flex') {
+            closePdfPreview();
+            return;
+        }
+
+        const secModal = document.getElementById('docSecurityModal');
+        if (secModal && secModal.style.display === 'flex') {
+            closeDocumentSecurityModal();
+            return;
+        }
+
+        const pinModal = document.getElementById('docPinUnlockModal');
+        if (pinModal && pinModal.style.display === 'flex') {
+            closePinUnlockModal();
+            return;
+        }
+
+        const quickModal = document.getElementById('signatureQuickModal');
+        if (quickModal && quickModal.style.display === 'flex') {
+            closeSignatureQuickModal();
+            return;
+        }
+
+        const profModal = document.getElementById('profileSettingsModal');
+        if (profModal && profModal.style.display === 'flex') {
+            closeProfileSettingsModal();
+            return;
+        }
+
+        const studioOverlay = document.getElementById('documentModalOverlay');
+        if (studioOverlay && studioOverlay.classList.contains('active')) {
+            closeDocumentModal();
+            return;
+        }
+    }
+});
+
+// Hook signature loading into profile open
+const _origOpenProfModal = openProfileSettingsModal;
+openProfileSettingsModal = function(e) {
+    _origOpenProfModal(e);
+    loadSignatureAssets();
+};
+
+
+window.showToast = showToast;
+window.loadSignatureAssets = loadSignatureAssets;
+window.handleSignatureFileUpload = handleSignatureFileUpload;
+window.setDefaultSig = setDefaultSig;
+window.deleteSig = deleteSig;
+window.onSignatureAssetChanged = onSignatureAssetChanged;
+window.handleToggleFinalDoc = handleToggleFinalDoc;
+window.openPdfPreview = openPdfPreview;
+window.closePdfPreview = closePdfPreview;
+window.openActivePdfPreview = openActivePdfPreview;
+window.printPdfFrame = printPdfFrame;

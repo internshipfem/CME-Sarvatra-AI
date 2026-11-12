@@ -32,6 +32,10 @@ KEYWORD_MAP = {
         'report', 'technical report', 'assessment',
         'analysis report', 'findings',
     ],
+    'leave_application': [
+        'leave', 'leave application', 'casual leave', 'annual leave',
+        'station leave', 'apply for leave', 'leave request', 'earned leave',
+    ],
 }
 
 # Human-readable labels
@@ -42,6 +46,7 @@ DOCUMENT_TYPE_LABELS = {
     'office_note': 'Office Note / Note Sheet',
     'office_order': 'Office Order',
     'technical_report': 'Technical Report',
+    'leave_application': 'Leave Application',
 }
 
 DOCUMENT_TYPE_ICONS = {
@@ -51,6 +56,7 @@ DOCUMENT_TYPE_ICONS = {
     'office_note': 'NOTE',
     'office_order': 'ORDER',
     'technical_report': 'REPORT',
+    'leave_application': 'LEAVE',
 }
 
 

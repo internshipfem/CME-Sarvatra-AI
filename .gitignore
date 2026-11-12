@@ -35,3 +35,7 @@ Thumbs.db
 
 scratch/
 media/generated_docs/
+media/
+backups/
+*.sqlite3-wal
+*.sqlite3-shm

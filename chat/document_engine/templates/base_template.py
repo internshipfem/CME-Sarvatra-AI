@@ -1,3 +1,4 @@
+import os
 """
 Base template — shared DOCX building logic adhering strictly to Indian Army CME standards.
 Provides identical typography, classification headers, metadata blocks, and signatures.
@@ -244,7 +245,7 @@ def add_body_content(doc, content):
         run.font.color.rgb = COLOR_BLACK
 
 
-def add_military_signature_block(doc, from_name='', from_rank='', from_appointment='', from_authority='', dept='Combat Engineering Wing', encl='', cc=None, date_str='', signature_style='military'):
+def add_military_signature_block(doc, from_name='', from_rank='', from_appointment='', from_authority='', dept='Combat Engineering Wing', encl='', cc=None, date_str='', signature_style='military', signature_image_path=None):
     """
     Add military-standard 2-column footer block:
     Left: Enclosures and Copy-To routing
@@ -326,6 +327,13 @@ def add_military_signature_block(doc, from_name='', from_rank='', from_appointme
         r_tok.font.color.rgb = COLOR_MUTED
     else:
         # Standard Authentic Military Staff Duties Format (No cartoon badges)
+        if signature_image_path and os.path.exists(signature_image_path):
+            try:
+                r_img = p_r.add_run()
+                r_img.add_picture(signature_image_path, height=Inches(0.45))
+                p_r.add_run("\n")
+            except Exception:
+                pass
         signer_name = str(from_name).strip() or 'Issuing Officer'
         r_sig = p_r.add_run(f"({signer_name})\n")
         r_sig.font.name = FONT_NAME
@@ -352,7 +360,7 @@ def add_military_signature_block(doc, from_name='', from_rank='', from_appointme
     return table
 
 
-def add_authority_signature_block(doc, from_name='', designation='Issuing Authority', dept='', from_rank='', from_appointment='', from_authority='', date_str='', signature_style='military'):
+def add_authority_signature_block(doc, from_name='', designation='Issuing Authority', dept='', from_rank='', from_appointment='', from_authority='', date_str='', signature_style='military', signature_image_path=None):
     """Add professional right-aligned military signature block (classic Staff Duties or e-Office DSC)."""
     p = doc.add_paragraph()
     p.alignment = ALIGN_RIGHT
@@ -400,6 +408,13 @@ def add_authority_signature_block(doc, from_name='', designation='Issuing Author
         r_tok.font.color.rgb = COLOR_MUTED
     else:
         # Classic Military Staff Duties Standard
+        if signature_image_path and os.path.exists(signature_image_path):
+            try:
+                r_img = p.add_run()
+                r_img.add_picture(signature_image_path, height=Inches(0.45))
+                p.add_run("\n")
+            except Exception:
+                pass
         r_name = p.add_run(f"({signer_name})\n")
         r_name.font.name = FONT_NAME
         r_name.font.size = Pt(10)

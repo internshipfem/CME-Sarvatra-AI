@@ -467,6 +467,7 @@
                 <button type="button" class="pill-btn" data-type="office_note" onclick="switchModalDocType('office_note')">Note Sheet</button>
                 <button type="button" class="pill-btn" data-type="office_order" onclick="switchModalDocType('office_order')">Office Order</button>
                 <button type="button" class="pill-btn" data-type="technical_report" onclick="switchModalDocType('technical_report')">Technical Report</button>
+                <button type="button" class="pill-btn" data-type="leave_application" onclick="switchModalDocType('leave_application')">Leave Application</button>
             </div>
 
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -593,6 +594,13 @@
                                 </button>
                                 <div id="dynamicSignatoryFields" class="studio-ext-content" style="display: none;">
                                     <div class="form-group" style="margin-bottom: 8px;">
+                                        <label class="form-label" style="font-size: 0.72rem; color: #94a3b8; text-transform: uppercase;">Digital Signature / Stamp Asset</label>
+                                        <select id="doc_field_signature_asset" class="form-control" style="background:#0f172a; border-color:#334155; color:#f8fafc;" onchange="onSignatureAssetChanged(this.value)">
+                                            <option value="">Default Signature (From Profile)</option>
+                                            <option value="none">No Signature (Leave Blank Space)</option>
+                                        </select>
+                                    </div>
+                                    <div class="form-group" style="margin-bottom: 8px;">
                                         <label class="form-label" style="font-size: 0.72rem; color: #94a3b8; text-transform: uppercase;">Signatory Officer Name</label>
                                         <input type="text" id="doc_field_from_name" name="from_name" class="form-control" placeholder="e.g. Officer Name or your name" />
                                     </div>
@@ -685,9 +693,17 @@
                                     </svg>
                                     <span id="btnStudioLockText">Passcode Lock</span>
                                 </button>
+                                <button type="button" id="btnStudioFinal" class="btn-studio-final" onclick="handleToggleFinalDoc()" title="Toggle Finalized Status (Removes DRAFT watermark on PDF)">
+                                    <span id="btnStudioFinalIcon">📝</span>
+                                    <span id="btnStudioFinalText">Mark as Final</span>
+                                </button>
                             </div>
 
                             <div class="studio-bottom-right-actions">
+                                <button type="button" id="btnStudioPreviewPdf" class="btn-studio-preview-pdf" onclick="openActivePdfPreview()" title="Open Standard Military PDF Preview">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+                                    <span>Preview PDF</span>
+                                </button>
                                 <button type="button" class="btn-studio-print" onclick="window.print()" title="Print Paper Document">
                                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                         <polyline points="6 9 6 2 18 2 18 9"></polyline>
@@ -957,6 +973,24 @@
                     </div>
                 </div>
 
+                <!-- Signature Image Bank / Asset Manager -->
+                <div class="sec-form-group" style="margin-top: 14px; border-top: 1px solid #1e293b; padding-top: 12px;">
+                    <label class="sec-label" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span>OFFICIAL SIGNATURE IMAGES (PNG / STAMPS)</span>
+                        <span style="font-size: 0.68rem; color: #64748b; text-transform: none;">Transparent PNG recommended</span>
+                    </label>
+                    <div id="sigAssetList" style="display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; min-height: 48px;">
+                        <div style="font-size: 0.75rem; color: #64748b; padding: 6px 0;">Loading signature assets...</div>
+                    </div>
+                    <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+                        <input type="text" id="sigAssetLabelInput" placeholder="Label (e.g. Formal, Short, Stamp)" class="sec-input" style="flex: 1; min-width: 140px; font-size: 0.78rem;" />
+                        <label class="sec-btn-outline" style="margin: 0; cursor: pointer; padding: 7px 12px; font-size: 0.75rem; border-radius: 6px; display: inline-flex; align-items: center; gap: 5px;">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" y1="3" x2="12" y2="15"></line></svg>
+                            <span>Upload Signature File</span>
+                            <input type="file" id="sigAssetFileInput" accept="image/png,image/jpeg" style="display: none;" onchange="handleSignatureFileUpload(event)" />
+                        </label>
+                    </div>
+                </div>
                 <div id="profSaveMessage" style="display: none; padding: 8px 12px; border-radius: 6px; font-size: 0.82rem;"></div>
             </div>
 
@@ -965,6 +999,24 @@
                 <button type="submit" class="btn-sec-primary" id="btnSaveProfile">Save Credentials</button>
             </div>
         </form>
+    </div>
+</div>
+
+
+<!-- Military PDF Preview Modal -->
+<div id="pdfPreviewModal" class="sec-modal-overlay" style="display: none;" onclick="if(event.target===this)closePdfPreview()">
+    <div class="sec-modal-dialog" style="max-width: 900px; width: 95%; height: 88vh; display: flex; flex-direction: column; padding: 0; overflow: hidden; background: #0f172a; border: 1px solid #334155; border-radius: 8px;">
+        <div class="sec-modal-header" style="padding: 10px 16px; border-bottom: 1px solid #1e293b; display: flex; justify-content: space-between; align-items: center; background: #0b1329;">
+            <div style="font-weight: 600; font-size: 0.88rem; color: #f1f5f9; display: flex; align-items: center; gap: 8px;">
+                <span style="color: #ef4444;">🛡️</span>
+                <span id="pdfPreviewTitle">Military Document Preview</span>
+            </div>
+            <div style="display: flex; gap: 8px; align-items: center;">
+                <button type="button" class="btn-sec-cancel" style="padding: 4px 10px; font-size: 0.75rem;" onclick="printPdfFrame()">Print</button>
+                <button type="button" class="sec-modal-close" onclick="closePdfPreview()" style="background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; line-height: 1;">&times;</button>
+            </div>
+        </div>
+        <iframe id="pdfPreviewFrame" src="" style="width: 100%; height: calc(100% - 46px); border: none; background: #ffffff;"></iframe>
     </div>
 </div>
 
@@ -1053,5 +1105,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{% static 'js/chat.js' %}?v=3.7"></script>
+<script src="{% static 'js/chat.js' %}?v=3.8"></script>
 {% endblock %}

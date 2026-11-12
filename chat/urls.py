@@ -21,9 +21,16 @@ urlpatterns = [
     path('api/documents/', views.list_user_documents_api, name='list_user_documents_api'),
     path('api/documents/<uuid:document_id>/lock/', views.toggle_document_lock_api, name='toggle_document_lock_api'),
     path('api/documents/<uuid:document_id>/verify-pin/', views.verify_document_pin_api, name='verify_document_pin_api'),
+    path('api/documents/<uuid:document_id>/toggle-final/', views.toggle_document_final_api, name='toggle_document_final_api'),
     path('api/documents/<uuid:document_id>/detail/', views.get_document_detail_api, name='get_document_detail_api'),
     path('api/documents/<uuid:document_id>/download/', views.download_document_api, name='download_document_api'),
     path('api/documents/<uuid:document_id>/pdf/', views.download_pdf_api, name='download_pdf_api'),
+    
+    # Signatures & Profile APIs
+    path('api/signatures/', views.list_signatures_api, name='list_signatures_api'),
+    path('api/signatures/upload/', views.upload_signature_api, name='upload_signature_api'),
+    path('api/signatures/<uuid:signature_id>/delete/', views.delete_signature_api, name='delete_signature_api'),
+    path('api/signatures/<uuid:signature_id>/set-default/', views.set_default_signature_api, name='set_default_signature_api'),
     path('api/profile/update/', views.update_profile_api, name='update_profile_api'),
 
     path('login/', views.login_view, name='login'),
