@@ -192,6 +192,7 @@ def _build_office_memo_html(fields, body_content, classification):
     from_appointment = _escape(fields.get('from_appointment') or '')
     from_authority = _escape(fields.get('from_authority') or '')
     from_dept = _escape(fields.get('from_department') or 'Headquarters')
+    station = _escape(fields.get('station') or 'CME, Pune – 411031')
     subject = _clean_subject(fields.get('subject') or '')
     action_required = _escape(fields.get('action_required') or '')
 
@@ -248,6 +249,7 @@ def _build_meeting_minutes_html(fields, body_content, classification):
     from_appointment = _escape(fields.get('from_appointment') or '')
     from_authority = _escape(fields.get('from_authority') or '')
     from_dept = _escape(fields.get('from_department') or 'Coordination Wing')
+    station = _escape(fields.get('station') or 'CME, Pune – 411031')
 
     body_html = _format_paragraphs(body_content)
 
@@ -311,6 +313,7 @@ def _build_office_note_html(fields, body_content, classification):
     from_appointment = _escape(fields.get('from_appointment') or '')
     from_authority = _escape(fields.get('from_authority') or '')
     from_dept = _escape(fields.get('from_department') or 'General Staff Branch')
+    station = _escape(fields.get('station') or 'CME, Pune – 411031')
 
     body_html = _format_paragraphs(body_content)
 
@@ -357,6 +360,7 @@ def _build_office_order_html(fields, body_content, classification):
     from_appointment = _escape(fields.get('from_appointment') or '')
     from_authority = _escape(fields.get('from_authority') or '')
     from_dept = _escape(fields.get('from_department') or 'General Staff Branch')
+    station = _escape(fields.get('station') or 'CME, Pune – 411031')
 
     body_html = _format_paragraphs(body_content)
 

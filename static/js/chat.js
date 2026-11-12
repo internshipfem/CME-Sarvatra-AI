@@ -70,6 +70,7 @@ function setupTextareaAutoresize() {
 
 // Initialize on DOM ready
 document.addEventListener('DOMContentLoaded', () => {
+    loadSignatureAssets();
     try {
         localStorage.removeItem('sarvatra_sidebar_collapsed');
     } catch (e) {}
@@ -1545,6 +1546,7 @@ const DOC_DEFINITIONS = {
 };
 
 function openDocumentPickerModal() {
+    loadSignatureAssets();
     startDocumentCreation('formal_letter');
     setTimeout(resetStudioScroll, 50);
 }
@@ -1797,6 +1799,14 @@ function collectCurrentFormFields() {
     if (!fields.from_employee_id) fields.from_employee_id = window.USER_EMP_ID || 'EMP-001';
 
     fields.signature_style = currentPreviewSigStyle || window.USER_SIG_STYLE || 'military';
+    const sigAssetVal = activeSignatureAssetId || document.getElementById('doc_field_signature_asset')?.value || '';
+    if (sigAssetVal === 'none') {
+        fields._signature_asset_id = 'none';
+        fields._no_signature = true;
+    } else if (sigAssetVal) {
+        fields._signature_asset_id = sigAssetVal;
+        fields._no_signature = false;
+    }
     return fields;
 }
 
@@ -2013,6 +2023,7 @@ async function submitGenerateDocument() {
     if (saveStatus) saveStatus.textContent = 'Generating...';
 
     try {
+        const selectedSigId = activeSignatureAssetId || document.getElementById('doc_field_signature_asset')?.value || '';
         const resp = await fetch('/api/agent/generate/', {
             method: 'POST',
             headers: {
@@ -2026,7 +2037,9 @@ async function submitGenerateDocument() {
                 conversation_id: activeConversationId,
                 security_pin: activeSessionPasscode || '',
                 lock_hint: currentDocLockHint || '',
-                encrypt_export: currentDocEncryptExport || false
+                encrypt_export: currentDocEncryptExport || false,
+                signature_asset_id: (selectedSigId && selectedSigId !== 'none') ? selectedSigId : '',
+                no_signature: selectedSigId === 'none'
             })
         });
 
@@ -2285,6 +2298,7 @@ async function saveDocumentContentChanges() {
                 saveStatus.textContent = 'Word doc synced';
                 saveStatus.classList.remove('dirty');
             }
+            showToast('Document saved', 'success');
             const sizeBadge = document.getElementById('downloadFileSizeBadge');
             if (sizeBadge && data.file_size) {
                 sizeBadge.textContent = data.file_size;
@@ -2436,12 +2450,14 @@ function renderDocumentPaperPreview(doc, fields) {
     const isMoM = doc.doc_type === 'meeting_minutes';
     const isNote = doc.doc_type === 'office_note';
     const isOrder = doc.doc_type === 'office_order';
+    const isLeave = doc.doc_type === 'leave_application';
 
     let docTypeBanner = '';
     if (isMemo) docTypeBanner = '<div class="paper-subject" style="font-size:0.95rem; margin: 4px 0;">OFFICE MEMORANDUM</div>';
     else if (isMoM) docTypeBanner = '<div class="paper-subject" style="font-size:0.95rem; margin: 4px 0;">MINUTES OF MEETING</div>';
     else if (isNote) docTypeBanner = '<div class="paper-subject" style="font-size:0.95rem; margin: 4px 0;">OFFICE NOTE / NOTE SHEET</div>';
     else if (isOrder) docTypeBanner = '<div class="paper-subject" style="font-size:0.95rem; margin: 4px 0;">OFFICE ORDER</div>';
+    else if (isLeave) docTypeBanner = '<div class="paper-subject" style="font-size:0.95rem; margin: 4px 0;">APPLICATION FOR LEAVE</div>';
 
     let headerHtml = `
         <div class="paper-header">
@@ -2467,7 +2483,10 @@ function renderDocumentPaperPreview(doc, fields) {
     `;
 
     let recipientHtml = '';
-    const toVal = fields.to_name || fields.to || '';
+    let toVal = fields.to_name || fields.to || '';
+    if (isLeave && !toVal.trim()) {
+        toVal = 'The Commandant,\nCollege of Military Engineering,\nDapodi, Pune – 411031';
+    }
     recipientHtml = `
         <div class="paper-to">
             <strong>To,</strong><br>
@@ -2476,6 +2495,9 @@ function renderDocumentPaperPreview(doc, fields) {
     `;
 
     let subjectClean = fields.subject || fields.meeting_title || fields.title || '';
+    if (isLeave && !subjectClean.trim()) {
+        subjectClean = `APPLICATION FOR ${(fields.leave_type || 'CASUAL LEAVE').toUpperCase()}`;
+    }
     subjectClean = subjectClean.replace(/key\s+points\s*:?/gi, '').replace(/^subject\s*:?/gi, '').trim();
 
     let subjectHtml = `
@@ -2518,6 +2540,35 @@ function renderDocumentPaperPreview(doc, fields) {
     const fromAuth = fields.from_authority || '';
     const dateStr = fields.date || 'Today';
 
+    const currentSigId = fields._signature_asset_id !== undefined ? fields._signature_asset_id : (activeSignatureAssetId || document.getElementById('doc_field_signature_asset')?.value || '');
+    let activeSigAsset = null;
+    if (currentSigId && currentSigId !== 'none' && Array.isArray(userSignatureAssets)) {
+        activeSigAsset = userSignatureAssets.find(s => s.id === currentSigId);
+    }
+    if (!activeSigAsset && currentSigId !== 'none' && Array.isArray(userSignatureAssets)) {
+        activeSigAsset = userSignatureAssets.find(s => s.is_default);
+    }
+
+    let sigGraphicHtml = '';
+    if (currentSigId === 'none' || fields._no_signature) {
+        sigGraphicHtml = '<div class="mil-signature-line" style="height: 38px;"></div>';
+    } else if (activeSigAsset && activeSigAsset.url) {
+        sigGraphicHtml = `
+            <div class="mil-signature-line" style="min-height: 40px; display: flex; justify-content: flex-end; align-items: center; margin-bottom: 3px;">
+                <img src="${activeSigAsset.url}" alt="${escapeHtml(activeSigAsset.label)}" style="height: 38px; max-width: 140px; object-fit: contain; display: block;" />
+            </div>
+        `;
+    } else {
+        sigGraphicHtml = `
+            <div class="mil-signature-line">
+                <svg class="signature-svg" viewBox="0 0 160 40" fill="none" stroke="#1e3a8a" stroke-width="1.6" stroke-linecap="round">
+                    <path d="M12 28 C 28 14, 34 8, 48 14 C 58 18, 52 30, 68 22 C 82 14, 78 8, 98 16 C 112 22, 118 14, 134 11 C 142 9, 146 22, 154 20"></path>
+                    <path d="M42 21 C 62 21, 102 23, 138 19" stroke-width="1.1"></path>
+                </svg>
+            </div>
+        `;
+    }
+
     const sigStyle = fields.signature_style || window.USER_SIG_STYLE || 'military';
     let rightSignBlockHtml = '';
 
@@ -2535,6 +2586,7 @@ function renderDocumentPaperPreview(doc, fields) {
                     </button>
                 </div>
                 <div class="eoffice-dsc-header">DIGITALLY SIGNED CERTIFICATE (DSC)</div>
+                ${activeSigAsset && activeSigAsset.url ? `<div style="text-align: center; margin: 4px 0;"><img src="${activeSigAsset.url}" style="height: 32px; max-width: 120px; object-fit: contain;" /></div>` : ""}
                 <table class="eoffice-dsc-table">
                     <tr>
                         <td class="dsc-label">Signed by:</td>
@@ -2575,12 +2627,7 @@ function renderDocumentPaperPreview(doc, fields) {
                         <span>Switch to DSC Stamp</span>
                     </button>
                 </div>
-                <div class="mil-signature-line">
-                    <svg class="signature-svg" viewBox="0 0 160 40" fill="none" stroke="#1e3a8a" stroke-width="1.6" stroke-linecap="round">
-                        <path d="M12 28 C 28 14, 34 8, 48 14 C 58 18, 52 30, 68 22 C 82 14, 78 8, 98 16 C 112 22, 118 14, 134 11 C 142 9, 146 22, 154 20"></path>
-                        <path d="M42 21 C 62 21, 102 23, 138 19" stroke-width="1.1"></path>
-                    </svg>
-                </div>
+${sigGraphicHtml}
                 <div class="mil-signer-name">
                     (<span id="docPaperSignName" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit Signatory Name">${escapeHtml(fromName || 'Issuing Officer')}</span>)
                 </div>
@@ -3460,7 +3507,11 @@ function populateSignatureAssetDropdown(sigs) {
     });
 
     sel.innerHTML = opts;
-    if (currentVal) sel.value = currentVal;
+    if (activeSignatureAssetId) {
+        sel.value = activeSignatureAssetId;
+    } else if (currentVal) {
+        sel.value = currentVal;
+    }
 }
 
 async function handleSignatureFileUpload(event) {
