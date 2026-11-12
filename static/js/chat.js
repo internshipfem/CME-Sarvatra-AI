@@ -3,6 +3,39 @@
  * 100% Self-Contained Offline JavaScript
  */
 
+/* ==========================================================================
+   Theme Management (Tactical Dark <-> Command Center Light)
+   ========================================================================== */
+
+function initTheme() {
+    const saved = localStorage.getItem('sarvatra_theme') || 'dark';
+    setTheme(saved);
+}
+
+function setTheme(theme) {
+    const text = document.getElementById('themeToggleText');
+    if (theme === 'light') {
+        document.documentElement.setAttribute('data-theme', 'light');
+        localStorage.setItem('sarvatra_theme', 'light');
+        if (text) text.textContent = 'Dark';
+    } else {
+        document.documentElement.removeAttribute('data-theme');
+        localStorage.setItem('sarvatra_theme', 'dark');
+        if (text) text.textContent = 'Light';
+    }
+}
+
+function toggleAppTheme() {
+    const current = document.documentElement.getAttribute('data-theme');
+    if (current === 'light') {
+        setTheme('dark');
+    } else {
+        setTheme('light');
+    }
+}
+window.toggleAppTheme = toggleAppTheme;
+initTheme();
+
 let activeConversationId = window.ACTIVE_CONVERSATION_ID || null;
 let stagedFiles = []; // { id, name, size }
 let currentAbortController = null;
@@ -525,7 +558,7 @@ function createAssistantMessagePlaceholder() {
     row.className = 'message-row assistant';
 
     row.innerHTML = `
-        <div class="message-avatar">🤖</div>
+        <div class="message-avatar"><span class="assistant-badge">AI</span></div>
         <div class="message-content-wrapper">
             <div class="message-bubble markdown-content">
                 <div class="rendered-markdown">
@@ -559,16 +592,16 @@ function displayPerformanceTelemetry(container, metrics) {
 
     let html = '';
     if (metrics.total_time) {
-        html += `<span class="metric-pill speed" title="Total response generation time">⚡ ${metrics.total_time}s</span>`;
+        html += `<span class="metric-pill speed" title="Total response generation time">${metrics.total_time}s</span>`;
     }
     if (metrics.tokens_per_second) {
-        html += `<span class="metric-pill speed" title="Generation speed">🚀 ${metrics.tokens_per_second} tok/s</span>`;
+        html += `<span class="metric-pill speed" title="Generation speed">${metrics.tokens_per_second} tok/s</span>`;
     }
     if (metrics.eval_count) {
-        html += `<span class="metric-pill" title="Tokens evaluated">📊 ${metrics.eval_count} tokens</span>`;
+        html += `<span class="metric-pill" title="Tokens evaluated">${metrics.eval_count} tok</span>`;
     }
     if (metrics.load_time) {
-        html += `<span class="metric-pill" title="Model load latency">⏱️ Load: ${metrics.load_time}s</span>`;
+        html += `<span class="metric-pill" title="Model load latency">load: ${metrics.load_time}s</span>`;
     }
     if (metrics.model) {
         html += `<span class="metric-pill model">${escapeHtml(metrics.model)}</span>`;
@@ -1234,3 +1267,2113 @@ function escapeHtml(text) {
     };
     return text.toString().replace(/[&<>"']/g, m => map[m]);
 }
+
+
+/* ==========================================================================
+   Document Creation Agent Engine (Option Picking & 1-LLM DOCX Generation)
+   ========================================================================== */
+
+let currentDocType = 'formal_letter';
+let currentDocSession = null;
+let currentGeneratedDocId = null;
+let currentDocIsLocked = false;
+let currentDocLockHint = '';
+let currentDocEncryptExport = false;
+let pendingUnlockDocId = null;
+let activeSessionPasscode = '';
+
+let isDocumentDirty = false;
+let paperAutoSaveTimer = null;
+
+function getDocTypeSvg(type) {
+    switch (type) {
+        case 'formal_letter':
+            return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>';
+        case 'office_memo':
+            return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><rect x="8" y="2" width="8" height="4" rx="1" ry="1"></rect></svg>';
+        case 'meeting_minutes':
+            return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>';
+        case 'office_note':
+            return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg>';
+        case 'office_order':
+            return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>';
+        case 'technical_report':
+            return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path></svg>';
+        default:
+            return '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>';
+    }
+}
+
+const CLASSIFICATION_LEVELS = [
+    { key: 'NONE', label: 'NONE', btnClass: 'class-none', stampClass: 'stamp-none' },
+    { key: 'CONFIDENTIAL', label: 'CONFIDENTIAL', btnClass: 'class-confidential', stampClass: 'stamp-confidential' },
+    { key: 'RESTRICTED', label: 'RESTRICTED', btnClass: 'class-restricted', stampClass: 'stamp-restricted' },
+    { key: 'SECRET', label: 'SECRET', btnClass: 'class-secret', stampClass: 'stamp-secret' },
+    { key: 'UNCLASSIFIED', label: 'UNCLASSIFIED', btnClass: 'class-unclassified', stampClass: 'stamp-unclassified' }
+];
+
+let currentClassification = 'NONE';
+
+function cycleClassification() {
+    const currentIndex = CLASSIFICATION_LEVELS.findIndex(c => c.key === currentClassification);
+    const nextIndex = (currentIndex + 1) % CLASSIFICATION_LEVELS.length;
+    currentClassification = CLASSIFICATION_LEVELS[nextIndex].key;
+    applyClassificationState();
+}
+
+function setClassification(levelKey) {
+    const target = CLASSIFICATION_LEVELS.find(c => c.key === levelKey);
+    if (target) {
+        currentClassification = target.key;
+    } else {
+        currentClassification = 'NONE';
+    }
+    applyClassificationState();
+}
+
+function applyClassificationState() {
+    const current = CLASSIFICATION_LEVELS.find(c => c.key === currentClassification) || CLASSIFICATION_LEVELS[0];
+    const btn = document.getElementById('btnToggleClass');
+    const textEl = document.getElementById('currentClassText');
+    const selectEl = document.getElementById('selectClassification');
+
+    if (textEl) {
+        textEl.textContent = current.label;
+    }
+
+    if (btn) {
+        btn.className = `studio-class-btn ${current.btnClass}`;
+        btn.setAttribute('title', `Active: ${current.label} (Click to toggle)`);
+    }
+
+    if (selectEl && selectEl.value !== current.key) {
+        selectEl.value = current.key;
+    }
+
+    // Update Paper sheet stamps (Hide completely if NONE)
+    const topStamp = document.getElementById('docPaperClassTop');
+    const bottomStamp = document.getElementById('docPaperClassBottom');
+    [topStamp, bottomStamp].forEach(el => {
+        if (el) {
+            if (current.key === 'NONE') {
+                el.style.display = 'none';
+                el.textContent = '';
+            } else {
+                el.style.display = '';
+                el.textContent = current.label;
+                el.className = `paper-classified-badge ${current.stampClass}`;
+            }
+        }
+    });
+}
+
+function triggerStudioDatePicker(e) {
+    const picker = document.getElementById('formDatePicker');
+    if (!picker) return;
+    if (typeof picker.showPicker === 'function') {
+        try {
+            picker.showPicker();
+            return;
+        } catch (err) {}
+    }
+    picker.focus();
+}
+
+function handleDatePickerClick(e) {
+    const picker = e.target || document.getElementById('formDatePicker');
+    if (picker && typeof picker.showPicker === 'function') {
+        try {
+            picker.showPicker();
+        } catch (err) {}
+    }
+}
+
+function syncDateToPicker(dateStr) {
+    if (!dateStr) return;
+    const picker = document.getElementById('formDatePicker');
+    if (!picker) return;
+    const clean = dateStr.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(clean)) {
+        picker.value = clean;
+        return;
+    }
+    const months = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
+    const match = clean.match(/^(\d{1,2})\s+([A-Za-z]{3})\s+(\d{4})$/);
+    if (match) {
+        const d = match[1].padStart(2, '0');
+        const m = months[match[2].toLowerCase()] || '01';
+        const y = match[3];
+        picker.value = `${y}-${m}-${d}`;
+    }
+}
+
+function onDateSelected(isoValue) {
+    if (!isoValue) return;
+    const parts = isoValue.split('-');
+    if (parts.length === 3) {
+        const year = parts[0];
+        const monthIndex = parseInt(parts[1], 10) - 1;
+        const day = parts[2];
+        const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const formatted = `${day} ${months[monthIndex]} ${year}`;
+        const displayText = document.getElementById('formDateText');
+        const hiddenInput = document.getElementById('formDate');
+        const paperDate = document.getElementById('docPaperDate');
+        const paperSignDate = document.getElementById('docPaperSignDate');
+
+        if (displayText) displayText.textContent = formatted;
+        if (hiddenInput) hiddenInput.value = formatted;
+        if (paperDate) paperDate.textContent = formatted;
+        if (paperSignDate) paperSignDate.textContent = formatted;
+
+        if (typeof saveDocumentContentChanges === 'function' && typeof currentGeneratedDocId !== 'undefined' && currentGeneratedDocId) {
+            saveDocumentContentChanges();
+        }
+    }
+}
+
+window.setClassification = setClassification;
+window.cycleClassification = cycleClassification;
+window.onDateSelected = onDateSelected;
+window.triggerStudioDatePicker = triggerStudioDatePicker;
+window.handleDatePickerClick = handleDatePickerClick;
+window.syncDateToPicker = syncDateToPicker;
+window.autoExpandTextarea = autoExpandTextarea;
+window.resetStudioScroll = resetStudioScroll;
+window.updateRegenerateButtonLabel = updateRegenerateButtonLabel;
+window.handleDocumentRegenerate = handleDocumentRegenerate;
+window.handleDocumentDownload = handleDocumentDownload;
+window.handleDocumentPdfDownload = handleDocumentPdfDownload;
+window.switchModalDocType = switchModalDocType;
+window.openDocumentPickerModal = openDocumentPickerModal;
+window.closeDocumentModal = closeDocumentModal;
+
+function autoExpandTextarea(el) {
+    if (!el) return;
+    el.style.height = 'auto';
+    const newHeight = Math.max(el.scrollHeight, 72);
+    if (newHeight > 280) {
+        el.style.height = '280px';
+        el.style.overflowY = 'auto';
+    } else {
+        el.style.height = `${newHeight}px`;
+        el.style.overflowY = 'hidden';
+    }
+}
+
+function resetStudioScroll() {
+    const modalBody = document.querySelector('.doc-modal-body');
+    if (modalBody) modalBody.scrollLeft = 0;
+    const studioGrid = document.querySelector('.studio-grid');
+    if (studioGrid) studioGrid.scrollLeft = 0;
+    const formCard = document.querySelector('.studio-form-card');
+    if (formCard) formCard.scrollLeft = 0;
+    const canvasWrap = document.querySelector('.studio-canvas-wrapper');
+    if (canvasWrap) canvasWrap.scrollLeft = 0;
+}
+
+const DOC_DEFINITIONS = {
+    formal_letter: {
+        title: 'Formal Military Letter',
+        required: [
+            { name: 'to_name', label: 'To', placeholder: 'Recipient designation...' },
+            { name: 'subject', label: 'Subject', placeholder: 'Official subject line...' },
+            { name: 'key_points', label: 'Directives', type: 'textarea', placeholder: 'Enter directives or key bullet points...' }
+        ],
+        optional: [
+            { name: 'cc_list', label: 'Copy to', placeholder: 'Copy to...' },
+            { name: 'enclosures', label: 'Enclosures', placeholder: 'List enclosures...' }
+        ]
+    },
+    office_memo: {
+        title: 'Office Memorandum',
+        required: [
+            { name: 'to', label: 'To', placeholder: 'Branch / personnel...' },
+            { name: 'subject', label: 'Subject', placeholder: 'Subject line...' },
+            { name: 'key_points', label: 'Directives', type: 'textarea', placeholder: 'Enter memorandum directives...' }
+        ],
+        optional: [
+            { name: 'action_required', label: 'Action Required', placeholder: 'Required action...' }
+        ]
+    },
+    meeting_minutes: {
+        title: 'Minutes of Meeting',
+        required: [
+            { name: 'meeting_title', label: 'Meeting Title', placeholder: 'Meeting title...' },
+            { name: 'venue', label: 'Venue', placeholder: 'Venue location...' },
+            { name: 'chairperson', label: 'Chairperson', placeholder: 'Chairperson name & rank...' },
+            { name: 'attendees', label: 'Attendees', placeholder: 'Attendees list...' },
+            { name: 'agenda_items', label: 'Discussions & Resolutions', type: 'textarea', placeholder: 'Record discussion points & decisions...' }
+        ],
+        optional: [
+            { name: 'action_items', label: 'Action Items', type: 'textarea', placeholder: 'Action items & responsible officers...' },
+            { name: 'next_meeting', label: 'Next Meeting', placeholder: 'Next meeting date...' }
+        ]
+    },
+    office_note: {
+        title: 'Office Note',
+        required: [
+            { name: 'subject', label: 'Subject', placeholder: 'Subject of proposal...' },
+            { name: 'key_points', label: 'Justification & Proposal', type: 'textarea', placeholder: 'Brief background, justification & proposal...' }
+        ],
+        optional: [
+            { name: 'references', label: 'References', placeholder: 'Reference files...' }
+        ]
+    },
+    office_order: {
+        title: 'Office Order',
+        required: [
+            { name: 'subject', label: 'Subject', placeholder: 'Order subject...' },
+            { name: 'authority', label: 'Authority', placeholder: 'Reference order / authority...' },
+            { name: 'key_points', label: 'Order Directives', type: 'textarea', placeholder: 'Order directives & instructions...' }
+        ],
+        optional: [
+            { name: 'effective_date', label: 'Effective Date', placeholder: 'Effective date...' },
+            { name: 'distribution', label: 'Distribution List', placeholder: 'Distribution list...' }
+        ]
+    },
+    technical_report: {
+        title: 'Technical Report',
+        required: [
+            { name: 'title', label: 'Report Title', placeholder: 'Report title...' },
+            { name: 'key_points', label: 'Technical Content', type: 'textarea', placeholder: 'Enter technical assessment & findings...' }
+        ],
+        optional: [
+            { name: 'abstract', label: 'Executive Summary', type: 'textarea', placeholder: 'Executive summary...' }
+        ]
+    }
+};
+
+function openDocumentPickerModal() {
+    startDocumentCreation('formal_letter');
+    setTimeout(resetStudioScroll, 50);
+}
+
+function closeDocumentModal(e) {
+    if (e && e.target !== e.currentTarget && !e.target.classList.contains('doc-modal-close') && !e.target.classList.contains('btn-modal-cancel')) {
+        return;
+    }
+    const overlay = document.getElementById('documentModalOverlay');
+    if (overlay) overlay.classList.remove('active');
+}
+
+const ARCHETYPE_FORM_CODES = {
+    formal_letter: 'Form: LTR-MIL',
+    office_memo: 'Form: MEMO-MIL',
+    meeting_minutes: 'Form: MOM-CONF',
+    office_note: 'Form: NOTE-SHEET',
+    office_order: 'Form: ORDER-GEN',
+    technical_report: 'Form: TECH-REP'
+};
+
+function switchModalDocType(docType, preserveDoc = false) {
+    currentDocType = docType;
+    resetStudioScroll();
+
+    if (!preserveDoc) {
+        currentGeneratedDocId = null;
+        isDocumentDirty = false;
+        currentDocIsLocked = false;
+        currentDocLockHint = '';
+        currentDocEncryptExport = false;
+        activeSessionPasscode = '';
+        updateStudioLockState(false, false);
+    }
+    
+    // Update pill buttons
+    document.querySelectorAll('.doc-type-selector-pills .pill-btn').forEach(btn => {
+        if (btn.getAttribute('data-type') === docType) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    });
+
+    const def = DOC_DEFINITIONS[docType] || DOC_DEFINITIONS.formal_letter;
+    const modalIcon = document.getElementById('docModalIcon');
+    const modalTitle = document.getElementById('docModalTitle');
+    const formTag = document.getElementById('docFormTag');
+
+    if (modalIcon) modalIcon.innerHTML = getDocTypeSvg(docType);
+    if (modalTitle) modalTitle.textContent = def.title;
+    if (formTag) formTag.textContent = ARCHETYPE_FORM_CODES[docType] || 'Form: MIL-STD';
+
+    if (!preserveDoc) {
+        // Reset status badges
+        const saveStatus = document.getElementById('paperSaveStatus');
+        if (saveStatus) {
+            saveStatus.textContent = 'Draft Ready';
+            saveStatus.classList.remove('dirty');
+        }
+        const sizeBadge = document.getElementById('downloadFileSizeBadge');
+        if (sizeBadge) sizeBadge.textContent = 'Draft';
+        const metaEl = document.getElementById('docResultMeta');
+        if (metaEl) metaEl.textContent = '';
+    }
+
+    renderModalFields(def);
+
+    if (!preserveDoc) {
+        // Render fresh blank draft formulation sheet (no fake prebuilt text)
+        const container = document.getElementById('docPreviewContainer');
+        if (container) {
+            const dummyDoc = {
+                doc_type: docType,
+                title: def.title,
+                generated_content: ''
+            };
+            const fields = collectCurrentFormFields();
+            container.innerHTML = renderDocumentPaperPreview(dummyDoc, fields);
+        }
+    }
+
+    setupLivePreviewSync();
+    const commentInput = document.getElementById('docRegenerateComment');
+    if (commentInput) commentInput.value = '';
+    updateRegenerateButtonLabel();
+    applyClassificationState();
+    setTimeout(resetStudioScroll, 20);
+}
+
+function renderModalFields(def) {
+    const container = document.getElementById('dynamicFormFields');
+    if (!container) return;
+    container.innerHTML = '';
+
+    // Render required fields
+    def.required.forEach(field => {
+        const group = document.createElement('div');
+        group.className = 'form-group';
+
+        const label = document.createElement('label');
+        label.className = 'doc-label';
+        label.innerHTML = `${escapeHtml(field.label)} <span class="req">*</span>`;
+
+        let input;
+        if (field.type === 'textarea') {
+            input = document.createElement('textarea');
+            input.className = 'doc-textarea';
+            input.rows = 2;
+            input.addEventListener('input', function() {
+                autoExpandTextarea(this);
+            });
+            setTimeout(() => autoExpandTextarea(input), 15);
+        } else {
+            input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'doc-input';
+        }
+        input.name = field.name;
+        input.id = `doc_field_${field.name}`;
+        input.placeholder = field.placeholder || '';
+        input.required = true;
+
+        group.appendChild(label);
+        group.appendChild(input);
+        container.appendChild(group);
+    });
+
+    // Render optional fields
+    const optContainer = document.getElementById('dynamicOptionalFields');
+    if (optContainer) {
+        optContainer.innerHTML = '';
+        if (def.optional && def.optional.length > 0) {
+            def.optional.forEach(field => {
+                const group = document.createElement('div');
+                group.className = 'form-group';
+
+                const label = document.createElement('label');
+                label.className = 'doc-label';
+                label.textContent = field.label;
+
+                let input;
+                if (field.type === 'textarea') {
+                    input = document.createElement('textarea');
+                    input.className = 'doc-textarea';
+                    input.rows = 2;
+                    input.addEventListener('input', function() {
+                        autoExpandTextarea(this);
+                    });
+                    setTimeout(() => autoExpandTextarea(input), 15);
+                } else {
+                    input = document.createElement('input');
+                    input.type = 'text';
+                    input.className = 'doc-input';
+                }
+                input.name = field.name;
+                input.id = `doc_field_${field.name}`;
+                input.placeholder = field.placeholder || '';
+
+                group.appendChild(label);
+                group.appendChild(input);
+                optContainer.appendChild(group);
+            });
+        }
+    }
+}
+
+function toggleOptionalFields() {
+    const wrap = document.getElementById('dynamicOptionalFields');
+    const icon = document.getElementById('optionalToggleIcon');
+    if (!wrap) return;
+    if (wrap.style.display === 'none') {
+        wrap.style.display = 'flex';
+        if (icon) {
+            icon.textContent = '▲';
+            icon.style.transform = 'rotate(180deg)';
+        }
+    } else {
+        wrap.style.display = 'none';
+        if (icon) {
+            icon.textContent = '▼';
+            icon.style.transform = 'rotate(0deg)';
+        }
+    }
+}
+
+function toggleSignatoryFields() {
+    const wrap = document.getElementById('dynamicSignatoryFields');
+    const icon = document.getElementById('signatoryToggleIcon');
+    if (!wrap) return;
+    if (wrap.style.display === 'none') {
+        wrap.style.display = 'block';
+        if (icon) {
+            icon.textContent = '▲';
+            icon.style.transform = 'rotate(180deg)';
+        }
+    } else {
+        wrap.style.display = 'none';
+        if (icon) {
+            icon.textContent = '▼';
+            icon.style.transform = 'rotate(0deg)';
+        }
+    }
+}
+window.toggleSignatoryFields = toggleSignatoryFields;
+
+function collectCurrentFormFields() {
+    const fields = {};
+    const refInput = document.getElementById('formRefNo');
+    const dateInput = document.getElementById('formDate');
+    if (refInput && refInput.value) fields.reference_number = refInput.value.trim();
+    if (dateInput && dateInput.value) fields.date = dateInput.value.trim();
+    fields.classification = currentClassification;
+
+    const form = document.getElementById('docGeneratorForm');
+    if (form) {
+        const fd = new FormData(form);
+        for (const [k, v] of fd.entries()) {
+            if (v && v.trim().length > 0) fields[k] = v.trim();
+        }
+    }
+
+    // Explicitly read signatory & station fields
+    const fromNameInput = document.getElementById('doc_field_from_name');
+    if (fromNameInput && fromNameInput.value) fields.from_name = fromNameInput.value.trim();
+
+    const fromRankInput = document.getElementById('doc_field_from_rank');
+    if (fromRankInput && fromRankInput.value) fields.from_rank = fromRankInput.value.trim();
+
+    const fromAppInput = document.getElementById('doc_field_from_appointment');
+    if (fromAppInput && fromAppInput.value) fields.from_appointment = fromAppInput.value.trim();
+
+    const fromAuthInput = document.getElementById('doc_field_from_authority');
+    if (fromAuthInput && fromAuthInput.value) fields.from_authority = fromAuthInput.value.trim();
+
+    const deptInput = document.getElementById('doc_field_from_department');
+    if (deptInput && deptInput.value) fields.from_department = deptInput.value.trim();
+
+    const stationInput = document.getElementById('doc_field_station');
+    if (stationInput && stationInput.value) fields.station = stationInput.value.trim();
+
+    if (currentDocSession && currentDocSession.auto_filled) {
+        for (const [k, v] of Object.entries(currentDocSession.auto_filled)) {
+            if (!fields[k]) fields[k] = v;
+        }
+    }
+
+    if (!fields.from_name && window.USER_NAME) fields.from_name = window.USER_NAME;
+    if (!fields.from_department) fields.from_department = window.USER_DEPT || 'Combat Engineering Wing';
+    if (!fields.from_employee_id) fields.from_employee_id = window.USER_EMP_ID || 'EMP-001';
+
+    fields.signature_style = currentPreviewSigStyle || window.USER_SIG_STYLE || 'military';
+    return fields;
+}
+
+function updateSignSeparator() {
+    const sep = document.getElementById('docPaperSignSep');
+    const rankEl = document.getElementById('docPaperSignRank');
+    const appEl = document.getElementById('docPaperSignAppointment');
+    if (!sep) return;
+    const hasRank = Boolean(rankEl && rankEl.textContent.trim().length > 0);
+    const hasApp = Boolean(appEl && appEl.textContent.trim().length > 0);
+    sep.textContent = (hasRank && hasApp) ? ', ' : '';
+}
+
+function setupLivePreviewSync() {
+    const refInput = document.getElementById('formRefNo');
+    const dateInput = document.getElementById('formDate');
+
+    if (refInput) {
+        refInput.oninput = () => {
+            const el = document.getElementById('docPaperRef');
+            if (el) el.textContent = refInput.value.trim() || 'CME/GEN/2026/0001';
+        };
+    }
+
+    if (dateInput) {
+        dateInput.oninput = () => {
+            const el = document.getElementById('docPaperDate');
+            if (el) el.textContent = dateInput.value.trim() || 'Today';
+            const signDate = document.getElementById('docPaperSignDate');
+            if (signDate) signDate.textContent = dateInput.value.trim() || 'Today';
+        };
+    }
+
+    const toInput = document.getElementById('doc_field_to') || document.getElementById('doc_field_to_name');
+    if (toInput) {
+        toInput.oninput = () => {
+            const el = document.getElementById('docPaperTo');
+            if (el) {
+                if (toInput.value.trim().length > 0) {
+                    el.style.color = '';
+                    el.style.fontStyle = '';
+                    el.innerHTML = escapeHtml(toInput.value).replace(/\n/g, '<br/>');
+                } else {
+                    el.style.color = '#94a3b8';
+                    el.style.fontStyle = 'italic';
+                    el.innerHTML = '[Recipient Designation &amp; HQ Address]';
+                }
+            }
+        };
+    }
+
+    const subInput = document.getElementById('doc_field_subject') || document.getElementById('doc_field_title') || document.getElementById('doc_field_meeting_title');
+    if (subInput) {
+        subInput.oninput = () => {
+            const el = document.getElementById('docPaperSubjectText');
+            if (el) {
+                el.textContent = subInput.value.trim().toUpperCase() || '[OFFICIAL SUBJECT LINE WILL APPEAR HERE]';
+            }
+        };
+    }
+
+    const nameInput = document.getElementById('doc_field_from_name');
+    if (nameInput) {
+        nameInput.oninput = () => {
+            const el = document.getElementById('docPaperSignName');
+            if (el) el.textContent = nameInput.value.trim();
+        };
+    }
+
+    const rankInput = document.getElementById('doc_field_from_rank');
+    if (rankInput) {
+        rankInput.oninput = () => {
+            const el = document.getElementById('docPaperSignRank');
+            if (el) el.textContent = rankInput.value.trim();
+            updateSignSeparator();
+        };
+    }
+
+    const appInput = document.getElementById('doc_field_from_appointment');
+    if (appInput) {
+        appInput.oninput = () => {
+            const el = document.getElementById('docPaperSignAppointment');
+            if (el) el.textContent = appInput.value.trim();
+            updateSignSeparator();
+        };
+    }
+
+    const authInput = document.getElementById('doc_field_from_authority');
+    if (authInput) {
+        authInput.oninput = () => {
+            const el = document.getElementById('docPaperSignAuthority');
+            if (el) el.textContent = authInput.value.trim();
+        };
+    }
+
+    const deptInput = document.getElementById('doc_field_from_department');
+    if (deptInput) {
+        deptInput.oninput = () => {
+            const el = document.getElementById('docPaperWing');
+            if (el) el.textContent = deptInput.value.trim() || 'Combat Engineering Wing';
+        };
+    }
+
+    const stnInput = document.getElementById('doc_field_station');
+    if (stnInput) {
+        stnInput.oninput = () => {
+            const el = document.getElementById('docPaperStation');
+            if (el) el.textContent = stnInput.value.trim() || 'CME, Pune – 411031';
+        };
+    }
+
+    const enclInput = document.getElementById('doc_field_enclosures');
+    if (enclInput) {
+        enclInput.oninput = () => {
+            const el = document.getElementById('docPaperEncl');
+            if (el) el.textContent = enclInput.value.trim() || 'As stated';
+        };
+    }
+
+    const ccInput = document.getElementById('doc_field_cc_list') || document.getElementById('doc_field_cc');
+    if (ccInput) {
+        ccInput.oninput = () => {
+            const el = document.getElementById('docPaperCc');
+            if (el) el.textContent = ccInput.value.trim();
+        };
+    }
+}
+
+async function startDocumentCreation(docType, initialMessage = '') {
+    currentDocType = docType || 'formal_letter';
+    currentGeneratedDocId = null;
+    isDocumentDirty = false;
+
+    const overlay = document.getElementById('documentModalOverlay');
+    if (overlay) overlay.classList.add('active');
+
+    switchModalDocType(currentDocType);
+    applyClassificationState();
+    setTimeout(resetStudioScroll, 50);
+
+    // Call /api/agent/start/ to get smart defaults
+    try {
+        const resp = await fetch('/api/agent/start/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                doc_type: currentDocType,
+                initial_message: initialMessage
+            })
+        });
+
+        if (resp.ok) {
+            const data = await resp.json();
+            currentDocSession = data;
+
+            const refInput = document.getElementById('formRefNo');
+            const dateInput = document.getElementById('formDate');
+
+            if (refInput && data.auto_filled && data.auto_filled.reference_number) {
+                refInput.value = data.auto_filled.reference_number;
+            }
+            if (dateInput && data.auto_filled && data.auto_filled.date) {
+                dateInput.value = data.auto_filled.date;
+                const dateText = document.getElementById('formDateText');
+                if (dateText) dateText.textContent = data.auto_filled.date;
+                syncDateToPicker(data.auto_filled.date);
+            }
+
+            // Pre-fill extracted fields if any was provided in initial chat
+            if (data.collected_fields) {
+                for (const [key, val] of Object.entries(data.collected_fields)) {
+                    const el = document.getElementById(`doc_field_${key}`);
+                    if (el && val) el.value = val;
+                }
+            }
+
+            // Re-render draft sheet with updated autofill headers (clean slate, no fake content)
+            const container = document.getElementById('docPreviewContainer');
+            if (container) {
+                const dummyDoc = {
+                    doc_type: currentDocType,
+                    title: DOC_DEFINITIONS[currentDocType]?.title || 'Military Document',
+                    generated_content: ''
+                };
+                container.innerHTML = renderDocumentPaperPreview(dummyDoc, collectCurrentFormFields());
+                setupLivePreviewSync();
+            }
+        }
+    } catch (err) {
+        console.warn('Could not initialize document session defaults:', err);
+    }
+}
+
+async function submitGenerateDocument() {
+    const form = document.getElementById('docGeneratorForm');
+    if (!form) return;
+
+    const collectedFields = collectCurrentFormFields();
+
+    // Model selection
+    const modelSelect = document.getElementById('modelSelect');
+    const selectedModel = modelSelect ? modelSelect.value : 'llama3:latest';
+
+    // Show generating progress in generate button
+    const btnSubmit = document.getElementById('btnSubmitGenerate');
+    const btnText = document.getElementById('btnSubmitGenerateText');
+    const saveStatus = document.getElementById('paperSaveStatus');
+
+    if (btnSubmit) btnSubmit.disabled = true;
+    if (btnText) btnText.textContent = 'Generating with local Ollama...';
+    if (saveStatus) saveStatus.textContent = 'Generating...';
+
+    try {
+        const resp = await fetch('/api/agent/generate/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                doc_type: currentDocType,
+                collected_fields: collectedFields,
+                model_name: selectedModel,
+                conversation_id: activeConversationId,
+                security_pin: activeSessionPasscode || '',
+                lock_hint: currentDocLockHint || '',
+                encrypt_export: currentDocEncryptExport || false
+            })
+        });
+
+        const data = await resp.json();
+
+        if (resp.ok && data.status === 'ok') {
+            const doc = data.document;
+            currentGeneratedDocId = doc.document_id;
+
+            // Render live authentic A4 document in the studio preview
+            const container = document.getElementById('docPreviewContainer');
+            if (container) {
+                container.innerHTML = renderDocumentPaperPreview(doc, collectedFields);
+                attachPaperEditListeners();
+            }
+
+            const metaEl = document.getElementById('docResultMeta');
+            if (metaEl) metaEl.textContent = `Generated in ${doc.generation_time}s • ${doc.model_used}`;
+
+            const sizeBadge = document.getElementById('downloadFileSizeBadge');
+            if (sizeBadge && doc.file_size) sizeBadge.textContent = doc.file_size;
+
+            isDocumentDirty = false;
+            if (saveStatus) {
+                saveStatus.textContent = 'Word doc synced';
+                saveStatus.classList.remove('dirty');
+            }
+
+            const commentInput = document.getElementById('docRegenerateComment');
+            if (commentInput) commentInput.value = '';
+            updateRegenerateButtonLabel();
+
+            addDocumentToSidebar(doc);
+
+            // Ensure preview window remains open and active
+            const overlay = document.getElementById('documentModalOverlay');
+            if (overlay) overlay.classList.add('active');
+            setTimeout(resetStudioScroll, 50);
+
+            const emptyState = document.getElementById('emptyState');
+            if (emptyState) emptyState.style.display = 'none';
+        } else {
+            alert('Generation error: ' + (data.error || 'Unknown error'));
+        }
+    } catch (err) {
+        alert('Communication error: ' + err.message);
+    } finally {
+        if (btnSubmit) btnSubmit.disabled = false;
+        if (btnText) btnText.textContent = 'Generate Document';
+    }
+}
+
+/* ==========================================================================
+   Editable Document Preview & Auto-Sync
+   ========================================================================== */
+
+function syncPaperToFormFields(sel, el) {
+    const text = (el.innerText || el.textContent || '').trim();
+    if (sel === '#docPaperRef') {
+        const input = document.getElementById('formRefNo');
+        if (input) input.value = text;
+    } else if (sel === '#docPaperDate') {
+        const dateText = document.getElementById('formDateText');
+        if (dateText) dateText.textContent = text;
+        const signDate = document.getElementById('docPaperSignDate');
+        if (signDate) signDate.textContent = text;
+        const formDate = document.getElementById('formDate');
+        if (formDate) formDate.value = text;
+        syncDateToPicker(text);
+    } else if (sel === '#docPaperTo') {
+        const input = document.getElementById('doc_field_to_name') || document.getElementById('doc_field_to');
+        if (input && !text.startsWith('[')) input.value = text;
+    } else if (sel === '#docPaperSubjectText') {
+        const input = document.getElementById('doc_field_subject') || document.getElementById('doc_field_meeting_title') || document.getElementById('doc_field_title');
+        if (input && !text.startsWith('[')) input.value = text;
+    } else if (sel === '#docPaperWing') {
+        const input = document.getElementById('doc_field_from_department');
+        if (input) input.value = text;
+    } else if (sel === '#docPaperStation') {
+        const input = document.getElementById('doc_field_station');
+        if (input) input.value = text;
+    } else if (sel === '#docPaperEncl') {
+        const input = document.getElementById('doc_field_enclosures');
+        if (input) input.value = text;
+    } else if (sel === '#docPaperCc') {
+        const input = document.getElementById('doc_field_cc_list') || document.getElementById('doc_field_cc');
+        if (input) input.value = text.replace(/^copy to:\s*/i, '');
+    } else if (sel === '#docPaperSignName') {
+        const input = document.getElementById('doc_field_from_name');
+        if (input) input.value = text.replace(/[()]/g, '').trim();
+    } else if (sel === '#docPaperSignRank') {
+        const input = document.getElementById('doc_field_from_rank');
+        if (input) input.value = text;
+        updateSignSeparator();
+    } else if (sel === '#docPaperSignAppointment') {
+        const input = document.getElementById('doc_field_from_appointment');
+        if (input) input.value = text;
+        updateSignSeparator();
+    } else if (sel === '#docPaperSignAuthority') {
+        const input = document.getElementById('doc_field_from_authority');
+        if (input) input.value = text;
+    }
+}
+
+function attachPaperEditListeners() {
+    const saveStatus = document.getElementById('paperSaveStatus');
+    const editableSelectors = [
+        '#paperBodyContent',
+        '#docPaperRef',
+        '#docPaperWing',
+        '#docPaperStation',
+        '#docPaperDate',
+        '#docPaperTo',
+        '#docPaperSubjectText',
+        '#docPaperSalutation',
+        '#docPaperEncl',
+        '#docPaperCc',
+        '#docPaperSignName',
+        '#docPaperSignRank',
+        '#docPaperSignAppointment',
+        '#docPaperSignAuthority',
+        '#docPaperOrg',
+        '#docPaperSub',
+        '#docPaperTele'
+    ];
+
+    editableSelectors.forEach(sel => {
+        const el = document.querySelector(sel);
+        if (!el) return;
+
+        el.addEventListener('input', () => {
+            isDocumentDirty = true;
+            if (saveStatus) {
+                saveStatus.textContent = 'Unsaved changes';
+                saveStatus.classList.add('dirty');
+            }
+
+            syncPaperToFormFields(sel, el);
+
+            if (paperAutoSaveTimer) clearTimeout(paperAutoSaveTimer);
+            paperAutoSaveTimer = setTimeout(() => {
+                saveDocumentContentChanges();
+            }, 800);
+        });
+
+        el.addEventListener('blur', () => {
+            if (isDocumentDirty) {
+                saveDocumentContentChanges();
+            }
+        });
+    });
+}
+
+function extractPaperBodyText() {
+    const bodyEl = document.getElementById('paperBodyContent');
+    if (!bodyEl) return '';
+
+    const paras = bodyEl.querySelectorAll('.paper-para');
+    if (paras.length > 0) {
+        const lines = [];
+        paras.forEach(p => {
+            const t = p.innerText.trim();
+            if (t.length > 0) lines.push(t);
+        });
+        return lines.join('\n\n');
+    }
+
+    return bodyEl.innerText.split('\n')
+        .map(l => l.trim())
+        .filter(l => l.length > 0)
+        .join('\n\n');
+}
+
+function extractPaperAllFields() {
+    const fields = collectCurrentFormFields();
+
+    const ref = document.getElementById('docPaperRef')?.innerText?.trim();
+    if (ref) fields.reference_number = ref;
+
+    const date = document.getElementById('docPaperDate')?.innerText?.trim();
+    if (date) fields.date = date;
+
+    const to = document.getElementById('docPaperTo')?.innerText?.trim();
+    if (to && !to.startsWith('[')) {
+        fields.to_name = to;
+        fields.to = to;
+    }
+
+    const sub = document.getElementById('docPaperSubjectText')?.innerText?.trim();
+    if (sub && !sub.startsWith('[')) {
+        fields.subject = sub;
+    }
+
+    const sal = document.getElementById('docPaperSalutation')?.innerText?.trim();
+    if (sal) fields.salutation = sal;
+
+    const encl = document.getElementById('docPaperEncl')?.innerText?.trim();
+    if (encl) fields.enclosures = encl;
+
+    const cc = document.getElementById('docPaperCc')?.innerText?.replace(/^copy to:\s*/i, '').trim();
+    if (cc) {
+        fields.cc = cc;
+        fields.cc_list = cc;
+    }
+
+    const signName = document.getElementById('docPaperSignName')?.innerText?.replace(/[()]/g, '').trim();
+    if (signName && signName !== 'Issuing Officer') fields.from_name = signName;
+
+    const signRank = document.getElementById('docPaperSignRank')?.innerText?.trim();
+    if (signRank) fields.from_rank = signRank;
+
+    const signApp = document.getElementById('docPaperSignAppointment')?.innerText?.trim();
+    if (signApp) fields.from_appointment = signApp;
+
+    const signAuth = document.getElementById('docPaperSignAuthority')?.innerText?.trim();
+    if (signAuth) fields.from_authority = signAuth;
+
+    const wing = document.getElementById('docPaperWing')?.innerText?.trim();
+    if (wing) fields.from_department = wing;
+
+    const station = document.getElementById('docPaperStation')?.innerText?.trim();
+    if (station) fields.station = station;
+
+    fields.signature_style = currentPreviewSigStyle || window.USER_SIG_STYLE || 'military';
+    return fields;
+}
+
+async function saveDocumentContentChanges() {
+    if (!currentGeneratedDocId) return;
+    const saveStatus = document.getElementById('paperSaveStatus');
+    const text = extractPaperBodyText();
+    const fields = extractPaperAllFields();
+
+    if (saveStatus) {
+        saveStatus.textContent = 'Saving to Word doc...';
+        saveStatus.classList.remove('dirty');
+    }
+
+    try {
+        const resp = await fetch(`/api/documents/${currentGeneratedDocId}/update-text/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                content: text || ' ',
+                fields: fields
+            })
+        });
+
+        const data = await resp.json();
+        if (resp.ok && data.status === 'ok') {
+            isDocumentDirty = false;
+            if (saveStatus) {
+                saveStatus.textContent = 'Word doc synced';
+                saveStatus.classList.remove('dirty');
+            }
+            const sizeBadge = document.getElementById('downloadFileSizeBadge');
+            if (sizeBadge && data.file_size) {
+                sizeBadge.textContent = data.file_size;
+            }
+        } else {
+            if (saveStatus) {
+                saveStatus.textContent = 'Sync failed';
+                saveStatus.classList.add('dirty');
+            }
+        }
+    } catch (err) {
+        console.warn('Document sync error:', err);
+        if (saveStatus) {
+            saveStatus.textContent = 'Sync error';
+            saveStatus.classList.add('dirty');
+        }
+    }
+}
+
+async function handleDocumentDownload() {
+    // If not generated yet, auto-generate first!
+    if (!currentGeneratedDocId) {
+        await submitGenerateDocument();
+        if (!currentGeneratedDocId) {
+            return;
+        }
+    }
+
+    // Ensure any unsaved edits in the preview are synced to DOCX before downloading
+    if (isDocumentDirty) {
+        await saveDocumentContentChanges();
+    }
+
+    let downloadUrl = `/api/documents/${currentGeneratedDocId}/download/`;
+    if (currentDocIsLocked && currentDocEncryptExport && activeSessionPasscode) {
+        downloadUrl += `?passcode=${encodeURIComponent(activeSessionPasscode)}`;
+    } else {
+        downloadUrl += `?decrypted=1`;
+    }
+
+    window.location.href = downloadUrl;
+}
+
+async function handleDocumentPdfDownload() {
+    // If not generated yet, auto-generate first!
+    if (!currentGeneratedDocId) {
+        await submitGenerateDocument();
+        if (!currentGeneratedDocId) {
+            return;
+        }
+    }
+
+    // Ensure any unsaved edits in the preview are synced before exporting
+    if (isDocumentDirty) {
+        await saveDocumentContentChanges();
+    }
+
+    let downloadUrl = `/api/documents/${currentGeneratedDocId}/pdf/`;
+    if (currentDocIsLocked && currentDocEncryptExport && activeSessionPasscode) {
+        downloadUrl += `?passcode=${encodeURIComponent(activeSessionPasscode)}`;
+    } else {
+        downloadUrl += `?decrypted=1`;
+    }
+
+    window.location.href = downloadUrl;
+}
+
+
+function updateRegenerateButtonLabel() {
+    const input = document.getElementById('docRegenerateComment');
+    const label = document.getElementById('btnRegenerateText');
+    if (!label) return;
+    if (input && input.value && input.value.trim().length > 0) {
+        label.textContent = 'Apply Changes';
+    } else {
+        label.textContent = 'Regenerate';
+    }
+}
+
+async function handleDocumentRegenerate() {
+    if (!currentGeneratedDocId) {
+        submitGenerateDocument();
+        return;
+    }
+
+    const commentInput = document.getElementById('docRegenerateComment');
+    const instruction = commentInput ? commentInput.value.trim() : '';
+
+    const btn = document.getElementById('btnDocRegenerate');
+    const saveStatus = document.getElementById('paperSaveStatus');
+
+    if (btn) btn.disabled = true;
+    if (saveStatus) saveStatus.textContent = instruction ? 'Applying revision...' : 'Regenerating...';
+
+    try {
+        const resp = await fetch(`/api/agent/revise/${currentGeneratedDocId}/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({ instruction })
+        });
+
+        const data = await resp.json();
+        if (resp.ok && data.status === 'ok') {
+            const doc = data.document;
+            currentGeneratedDocId = doc.document_id;
+            isDocumentDirty = false;
+
+            const container = document.getElementById('docPreviewContainer');
+            if (container) {
+                container.innerHTML = renderDocumentPaperPreview(doc, collectCurrentFormFields());
+                attachPaperEditListeners();
+            }
+
+            const metaEl = document.getElementById('docResultMeta');
+            if (metaEl) {
+                const label = instruction ? `Revised (v${doc.version})` : `Regenerated (v${doc.version})`;
+                metaEl.textContent = `${label} in ${doc.generation_time}s • ${doc.model_used}`;
+            }
+
+            const sizeBadge = document.getElementById('downloadFileSizeBadge');
+            if (sizeBadge && doc.file_size) sizeBadge.textContent = doc.file_size;
+
+            if (saveStatus) {
+                saveStatus.textContent = 'Word doc synced';
+                saveStatus.classList.remove('dirty');
+            }
+
+            if (commentInput) commentInput.value = '';
+            updateRegenerateButtonLabel();
+
+            addDocumentToSidebar(doc);
+        } else {
+            alert('Regeneration error: ' + (data.error || 'Failed'));
+        }
+    } catch (err) {
+        alert('Communication error: ' + err.message);
+    } finally {
+        if (btn) btn.disabled = false;
+    }
+}
+
+function renderDocumentPaperPreview(doc, fields) {
+    fields = fields || {};
+    const isLetter = doc.doc_type === 'formal_letter';
+    const isMemo = doc.doc_type === 'office_memo';
+    const isMoM = doc.doc_type === 'meeting_minutes';
+    const isNote = doc.doc_type === 'office_note';
+    const isOrder = doc.doc_type === 'office_order';
+
+    let docTypeBanner = '';
+    if (isMemo) docTypeBanner = '<div class="paper-subject" style="font-size:0.95rem; margin: 4px 0;">OFFICE MEMORANDUM</div>';
+    else if (isMoM) docTypeBanner = '<div class="paper-subject" style="font-size:0.95rem; margin: 4px 0;">MINUTES OF MEETING</div>';
+    else if (isNote) docTypeBanner = '<div class="paper-subject" style="font-size:0.95rem; margin: 4px 0;">OFFICE NOTE / NOTE SHEET</div>';
+    else if (isOrder) docTypeBanner = '<div class="paper-subject" style="font-size:0.95rem; margin: 4px 0;">OFFICE ORDER</div>';
+
+    let headerHtml = `
+        <div class="paper-header">
+            <div class="paper-org paper-editable" id="docPaperOrg" contenteditable="true" spellcheck="false" title="Click to edit organization">${escapeHtml(fields.organization || 'COLLEGE OF MILITARY ENGINEERING')}</div>
+            <div class="paper-sub paper-editable" id="docPaperSub" contenteditable="true" spellcheck="false" title="Click to edit subtitle">${escapeHtml(fields.sub_header || 'Dapodi, Pune – 411031 • Corps of Engineers')}</div>
+            ${docTypeBanner}
+            <div class="paper-divider"></div>
+        </div>
+    `;
+
+    let metaHtml = `
+        <div class="paper-meta-row">
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+                <span id="docPaperTele" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit Tele">${escapeHtml(fields.tele || 'Tele: 020-27146000/2204')}</span>
+                <span>Ref: <strong id="docPaperRef" contenteditable="true" spellcheck="false" class="paper-editable" placeholder="Ref No." title="Click to edit Ref No">${escapeHtml(fields.reference_number || 'CME/CEW/2026/1104')}</strong></span>
+            </div>
+            <div style="display: flex; flex-direction: column; text-align: right; gap: 2px;">
+                <span id="docPaperWing" contenteditable="true" spellcheck="false" class="paper-editable" placeholder="Wing / Department" title="Click to edit Wing">${escapeHtml(fields.from_department || 'Combat Engineering Wing')}</span>
+                <span id="docPaperStation" contenteditable="true" spellcheck="false" class="paper-editable" placeholder="Station" title="Click to edit Station">${escapeHtml(fields.station || 'CME, Pune – 411031')}</span>
+                <span id="docPaperDate" contenteditable="true" spellcheck="false" class="paper-editable" placeholder="Date" title="Click to edit Date">${escapeHtml(fields.date || 'Today')}</span>
+            </div>
+        </div>
+    `;
+
+    let recipientHtml = '';
+    const toVal = fields.to_name || fields.to || '';
+    recipientHtml = `
+        <div class="paper-to">
+            <strong>To,</strong><br>
+            <div id="docPaperTo" contenteditable="true" spellcheck="false" class="paper-editable" placeholder="[Recipient Designation &amp; HQ Address]" title="Click to edit Addressee">${toVal.trim().length > 0 ? escapeHtml(toVal).replace(/\n/g, '<br/>') : ''}</div>
+        </div>
+    `;
+
+    let subjectClean = fields.subject || fields.meeting_title || fields.title || '';
+    subjectClean = subjectClean.replace(/key\s+points\s*:?/gi, '').replace(/^subject\s*:?/gi, '').trim();
+
+    let subjectHtml = `
+        <div class="paper-subject" id="docPaperSubject">
+            <strong>SUBJECT:</strong> <u><span id="docPaperSubjectText" contenteditable="true" spellcheck="false" class="paper-editable" placeholder="[OFFICIAL SUBJECT LINE]" title="Click to edit Subject">${escapeHtml(subjectClean.toUpperCase())}</span></u>
+        </div>
+    `;
+
+    const hasContent = Boolean(doc && doc.generated_content && doc.generated_content.trim().length > 0);
+
+    let paragraphsHtml = '';
+    if (hasContent) {
+        paragraphsHtml = (doc.generated_content || '').split('\n')
+            .map(p => p.trim())
+            .filter(p => p.length > 0)
+            .map(p => `<p class="paper-para">${escapeHtml(p)}</p>`)
+            .join('');
+    } else {
+        paragraphsHtml = `
+            <div class="paper-draft-placeholder">
+                <div class="placeholder-watermark">
+                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>
+                    <div class="placeholder-title">Awaiting Formulation Directives</div>
+                    <div class="placeholder-sub">
+                        Enter addressee, subject, and operational brief on the left, then click <strong>"Generate Document"</strong> to draft your official military document.
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    const fromName = fields.from_name || '';
+    const fromRank = fields.from_rank || '';
+    const fromApp = fields.from_appointment || '';
+    const fromAuth = fields.from_authority || '';
+    const dateStr = fields.date || 'Today';
+
+    const sigStyle = fields.signature_style || window.USER_SIG_STYLE || 'military';
+    let rightSignBlockHtml = '';
+
+    if (sigStyle === 'eoffice') {
+        rightSignBlockHtml = `
+            <div class="eoffice-dsc-box">
+                <div class="paper-sig-quick-actions no-print">
+                    <button type="button" class="sig-action-btn" onclick="openSignatureQuickModal()" title="Modify Signatory Credentials">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                        <span>Edit</span>
+                    </button>
+                    <button type="button" class="sig-action-btn" onclick="togglePreviewSigStyle()" title="Switch to Classic Military format">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+                        <span>Switch to Military</span>
+                    </button>
+                </div>
+                <div class="eoffice-dsc-header">DIGITALLY SIGNED CERTIFICATE (DSC)</div>
+                <table class="eoffice-dsc-table">
+                    <tr>
+                        <td class="dsc-label">Signed by:</td>
+                        <td class="dsc-val"><strong>(<span id="docPaperSignName" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit">${escapeHtml(fromName || 'Issuing Officer')}</span>)</strong></td>
+                    </tr>
+                    ${(fromRank || fromApp) ? `
+                    <tr>
+                        <td class="dsc-label">Role:</td>
+                        <td class="dsc-val"><span id="docPaperSignRank" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit rank">${escapeHtml(fromRank)}</span>${(fromRank && fromApp) ? ', ' : ''}<span id="docPaperSignAppointment" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit appointment">${escapeHtml(fromApp)}</span></td>
+                    </tr>` : ''}
+                    ${fromAuth ? `
+                    <tr>
+                        <td class="dsc-label">Authority:</td>
+                        <td class="dsc-val"><span id="docPaperSignAuthority" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit authority">${escapeHtml(fromAuth)}</span></td>
+                    </tr>` : ''}
+                    <tr>
+                        <td class="dsc-label">Location:</td>
+                        <td class="dsc-val">${escapeHtml(fields.station || 'CME, Dapodi, Pune')}</td>
+                    </tr>
+                    <tr>
+                        <td class="dsc-label">Date:</td>
+                        <td class="dsc-val"><span id="docPaperSignDate">${escapeHtml(dateStr)}</span> IST</td>
+                    </tr>
+                </table>
+            </div>
+        `;
+    } else {
+        // Authentic Indian Army Military Staff Duties Format
+        rightSignBlockHtml = `
+            <div class="paper-signature-mil">
+                <div class="paper-sig-quick-actions no-print">
+                    <button type="button" class="sig-action-btn" onclick="openSignatureQuickModal()" title="Modify Signatory Credentials & Style">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+                        <span>Edit Signatory</span>
+                    </button>
+                    <button type="button" class="sig-action-btn" onclick="togglePreviewSigStyle()" title="Switch to e-Office DSC Certificate format">
+                        <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/></svg>
+                        <span>Switch to DSC Stamp</span>
+                    </button>
+                </div>
+                <div class="mil-signature-line">
+                    <svg class="signature-svg" viewBox="0 0 160 40" fill="none" stroke="#1e3a8a" stroke-width="1.6" stroke-linecap="round">
+                        <path d="M12 28 C 28 14, 34 8, 48 14 C 58 18, 52 30, 68 22 C 82 14, 78 8, 98 16 C 112 22, 118 14, 134 11 C 142 9, 146 22, 154 20"></path>
+                        <path d="M42 21 C 62 21, 102 23, 138 19" stroke-width="1.1"></path>
+                    </svg>
+                </div>
+                <div class="mil-signer-name">
+                    (<span id="docPaperSignName" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit Signatory Name">${escapeHtml(fromName || 'Issuing Officer')}</span>)
+                </div>
+                ${(fromRank || fromApp) ? `
+                <div class="mil-signer-role">
+                    <span id="docPaperSignRank" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit Rank">${escapeHtml(fromRank)}</span>${(fromRank && fromApp) ? ', ' : ''}<span id="docPaperSignAppointment" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit Appointment">${escapeHtml(fromApp)}</span>
+                </div>` : ''}
+                ${fromAuth ? `
+                <div class="mil-signer-auth">
+                    <span id="docPaperSignAuthority" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit Authority">${escapeHtml(fromAuth)}</span>
+                </div>` : ''}
+            </div>
+        `;
+    }
+
+    let signHtml = `
+        <div class="paper-signature-block">
+            <div class="paper-encl-summary">
+                ${fields.enclosures ? `<div class="paper-encl-title">Encl: <span id="docPaperEncl" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit enclosures">${escapeHtml(fields.enclosures)}</span></div>` : ''}
+                ${(fields.cc || fields.cc_list) ? `<div id="docPaperCcWrapper" style="margin-top: 4px; font-size: 0.76rem; color: #475569;">Copy to: <span id="docPaperCc" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit CC list">${escapeHtml(fields.cc || fields.cc_list)}</span></div>` : ''}
+            </div>
+            ${rightSignBlockHtml}
+        </div>
+    `;
+
+    const isNoneClass = currentClassification === 'NONE';
+    const topBadgeHtml = isNoneClass ? '' : `<span class="paper-classified-badge stamp-${currentClassification.toLowerCase()}" id="docPaperClassTop">${currentClassification}</span>`;
+    const botBadgeHtml = isNoneClass ? '' : `<span class="paper-classified-badge stamp-${currentClassification.toLowerCase()}" id="docPaperClassBottom">${currentClassification}</span>`;
+
+    return `
+        <div class="paper-sheet">
+            <div class="paper-classified-header">
+                ${topBadgeHtml}
+            </div>
+            ${headerHtml}
+            ${metaHtml}
+            ${recipientHtml}
+            ${subjectHtml}
+            ${isLetter ? `<div class="paper-salutation"><span id="docPaperSalutation" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit Salutation">${escapeHtml(fields.salutation || 'Sir,')}</span></div>` : ''}
+            <div class="paper-body" id="paperBodyContent" ${hasContent ? 'contenteditable="true" spellcheck="true" title="Click anywhere to edit text directly"' : ''}>${paragraphsHtml}</div>
+            ${signHtml}
+            <div class="paper-classified-footer" style="${isNoneClass ? 'margin-top: 8px;' : 'margin-top: 24px;'}">
+                ${botBadgeHtml}
+            </div>
+        </div>
+    `;
+}
+
+function addDocumentToSidebar(doc) {
+    const list = document.getElementById('sidebarDocList');
+    if (!list) return;
+
+    const docId = doc.document_id || doc.id;
+    if (!docId) return;
+
+    // Check if item already exists in sidebar
+    const existing = list.querySelector(`.doc-sidebar-item[data-doc-id="${docId}"]`);
+    if (existing) {
+        const titleSpan = existing.querySelector('.doc-item-title');
+        const metaSpan = existing.querySelector('.doc-item-meta');
+        if (titleSpan) {
+            titleSpan.innerHTML = `${escapeHtml(doc.title)} ${doc.is_locked ? '<span class="sidebar-lock-badge">🔒</span>' : ''}`;
+        }
+        if (metaSpan) {
+            metaSpan.textContent = `${doc.file_size} • v${doc.version || 1}${doc.is_locked ? ' • Locked' : ''}`;
+        }
+        return;
+    }
+
+    const item = document.createElement('a');
+    item.href = '#';
+    item.className = `doc-sidebar-item ${doc.is_locked ? 'is-locked' : ''}`;
+    item.setAttribute('data-doc-id', docId);
+    item.setAttribute('data-locked', doc.is_locked ? 'true' : 'false');
+    item.title = doc.is_locked ? `🔒 Locked Document: ${doc.title}` : `Click to preview ${doc.title}`;
+    item.onclick = (e) => handleArchiveDocumentClick(e, docId, Boolean(doc.is_locked));
+
+    const lockBadge = doc.is_locked ? '<span class="sidebar-lock-badge">🔒</span>' : '';
+    item.innerHTML = `
+        <span class="doc-item-icon">
+            ${doc.is_locked ? 
+                `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-maroon">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>` : 
+                `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                </svg>`
+            }
+        </span>
+        <div class="doc-item-info">
+            <span class="doc-item-title">${escapeHtml(doc.title)} ${lockBadge}</span>
+            <span class="doc-item-meta">${doc.file_size} • v${doc.version || 1}${doc.is_locked ? ' • Locked' : ''}</span>
+        </div>
+    `;
+
+    // Remove "No documents yet" notice if present
+    const emptyNotice = list.querySelector('div');
+    if (emptyNotice && emptyNotice.textContent.includes('No documents')) {
+        emptyNotice.remove();
+    }
+
+    list.insertBefore(item, list.firstChild);
+
+    // Update count badge
+    const badge = document.getElementById('docCountBadge');
+    if (badge) {
+        const current = parseInt(badge.textContent || '0', 10);
+        badge.textContent = current + 1;
+    }
+}
+
+
+/* ==========================================================================
+   Document Security Lock & AES-256 Passcode Protection
+   ========================================================================== */
+
+function updateStudioLockState(isLocked, encryptExport) {
+    currentDocIsLocked = isLocked;
+    currentDocEncryptExport = encryptExport;
+    const btn = document.getElementById('btnStudioLock');
+    const text = document.getElementById('btnStudioLockText');
+    const pdfBadge = document.getElementById('pdfEncBadge');
+    const pdfBtn = document.getElementById('btnDownloadPdf');
+
+    if (btn && text) {
+        if (isLocked) {
+            btn.classList.add('is-locked');
+            text.textContent = encryptExport ? 'Locked (AES-256) 🔒' : 'PIN Locked 🔒';
+            btn.setAttribute('title', 'Document is secured with an Officer PIN. Click to manage.');
+        } else {
+            btn.classList.remove('is-locked');
+            text.textContent = 'Passcode Lock';
+            btn.setAttribute('title', 'Set an Officer PIN & AES-256 PDF/DOCX encryption.');
+        }
+    }
+
+    if (pdfBadge) {
+        if (isLocked && encryptExport) {
+            pdfBadge.textContent = 'Locked 🔒';
+            pdfBadge.classList.add('is-locked');
+        } else {
+            pdfBadge.textContent = 'A4';
+            pdfBadge.classList.remove('is-locked');
+        }
+    }
+
+    if (pdfBtn) {
+        if (isLocked && encryptExport) {
+            pdfBtn.classList.add('is-locked');
+        } else {
+            pdfBtn.classList.remove('is-locked');
+        }
+    }
+}
+
+async function openDocumentSecurityModal() {
+    const modal = document.getElementById('docSecurityModal');
+    if (!modal) return;
+
+    const activeBanner = document.getElementById('secLockActiveBanner');
+    const removeBtn = document.getElementById('btnSecRemoveLock');
+    const applyBtnText = document.querySelector('#btnSecApplyLock span');
+    const hintInput = document.getElementById('secLockHint');
+    const pinInput = document.getElementById('secLockPin');
+    const checkEnc = document.getElementById('secCheckEncryptExport');
+    const checkArch = document.getElementById('secCheckLockArchive');
+
+    // If already generated, fetch status from server
+    if (currentGeneratedDocId) {
+        try {
+            const resp = await fetch(`/api/documents/${currentGeneratedDocId}/detail/`);
+            if (resp.ok) {
+                const data = await resp.json();
+                const isLocked = Boolean(data.document && data.document.is_locked);
+                const hint = (data.document && data.document.lock_hint) || '';
+                const encExport = Boolean(data.document && data.document.encrypt_export);
+
+                if (isLocked) {
+                    currentDocIsLocked = true;
+                    currentDocLockHint = hint;
+                    currentDocEncryptExport = encExport;
+                }
+            }
+        } catch (err) {
+            console.warn('Could not inspect document lock status:', err);
+        }
+    }
+
+    if (currentDocIsLocked) {
+        if (activeBanner) activeBanner.style.display = 'flex';
+        if (removeBtn) removeBtn.style.display = 'block';
+        if (applyBtnText) applyBtnText.textContent = 'Update Security Lock 🔒';
+        if (hintInput) hintInput.value = currentDocLockHint || '';
+        if (checkEnc) checkEnc.checked = currentDocEncryptExport;
+    } else {
+        if (activeBanner) activeBanner.style.display = 'none';
+        if (removeBtn) removeBtn.style.display = 'none';
+        if (applyBtnText) applyBtnText.textContent = 'Apply Security Lock 🔒';
+        if (hintInput) hintInput.value = '';
+        if (checkEnc) checkEnc.checked = true;
+        if (checkArch) checkArch.checked = true;
+    }
+
+    if (pinInput) pinInput.value = activeSessionPasscode || '';
+
+    const feedback = document.getElementById('secLockFeedback');
+    if (feedback) feedback.style.display = 'none';
+
+    modal.style.display = 'flex';
+    if (pinInput) pinInput.focus();
+}
+
+function closeDocumentSecurityModal() {
+    const modal = document.getElementById('docSecurityModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function togglePasscodeVisibility(inputId) {
+    const el = document.getElementById(inputId);
+    if (!el) return;
+    el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+async function handleApplyDocumentLock() {
+    const pinInput = document.getElementById('secLockPin');
+    const hintInput = document.getElementById('secLockHint');
+    const checkEnc = document.getElementById('secCheckEncryptExport');
+
+    const pin = pinInput ? pinInput.value.trim() : '';
+    const hint = hintInput ? hintInput.value.trim() : '';
+    const encryptExport = checkEnc ? checkEnc.checked : true;
+
+    if (pin.length < 4) {
+        alert('Security PIN / Passcode must be at least 4 characters long.');
+        if (pinInput) pinInput.focus();
+        return;
+    }
+
+    activeSessionPasscode = pin;
+    currentDocIsLocked = true;
+    currentDocLockHint = hint;
+    currentDocEncryptExport = encryptExport;
+    updateStudioLockState(true, encryptExport);
+
+    if (currentGeneratedDocId) {
+        try {
+            const resp = await fetch(`/api/documents/${currentGeneratedDocId}/lock/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': getCsrfToken()
+                },
+                body: JSON.stringify({
+                    action: 'lock',
+                    pin: pin,
+                    hint: hint,
+                    encrypt_export: encryptExport
+                })
+            });
+
+            const data = await resp.json();
+            if (resp.ok && data.status === 'ok') {
+                const sidebarItem = document.querySelector(`.doc-sidebar-item[data-doc-id="${currentGeneratedDocId}"]`) || document.querySelector(`.doc-sidebar-item[href*="${currentGeneratedDocId}"]`);
+                if (sidebarItem) {
+                    sidebarItem.classList.add('is-locked');
+                    sidebarItem.setAttribute('data-locked', 'true');
+                    sidebarItem.title = `🔒 Locked Document: ${sidebarItem.querySelector('.doc-item-title')?.textContent?.trim() || 'document'}`;
+                    sidebarItem.onclick = (e) => handleArchiveDocumentClick(e, currentGeneratedDocId, true);
+                    const titleEl = sidebarItem.querySelector('.doc-item-title');
+                    if (titleEl && !titleEl.innerHTML.includes('sidebar-lock-badge')) {
+                        titleEl.innerHTML += ' <span class="sidebar-lock-badge">🔒</span>';
+                    }
+                    const iconSvg = sidebarItem.querySelector('.doc-item-icon');
+                    if (iconSvg) {
+                        iconSvg.innerHTML = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="text-maroon">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                        </svg>`;
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn('Error saving lock to server:', err);
+        }
+    }
+
+    closeDocumentSecurityModal();
+}
+
+async function handleRemoveDocumentLock() {
+    if (!currentGeneratedDocId) {
+        activeSessionPasscode = '';
+        currentDocIsLocked = false;
+        currentDocLockHint = '';
+        currentDocEncryptExport = false;
+        updateStudioLockState(false, false);
+        closeDocumentSecurityModal();
+        return;
+    }
+
+    const pinInput = document.getElementById('secLockPin');
+    const pin = (pinInput && pinInput.value.trim()) ? pinInput.value.trim() : (activeSessionPasscode || '');
+
+    try {
+        const resp = await fetch(`/api/documents/${currentGeneratedDocId}/lock/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({
+                action: 'unlock',
+                pin: pin
+            })
+        });
+
+        const data = await resp.json();
+        if (resp.ok && data.status === 'ok') {
+            activeSessionPasscode = '';
+            currentDocIsLocked = false;
+            currentDocLockHint = '';
+            currentDocEncryptExport = false;
+            updateStudioLockState(false, false);
+
+            const sidebarItem = document.querySelector(`.doc-sidebar-item[data-doc-id="${currentGeneratedDocId}"]`) || document.querySelector(`.doc-sidebar-item[href*="${currentGeneratedDocId}"]`);
+            if (sidebarItem) {
+                sidebarItem.classList.remove('is-locked');
+                sidebarItem.setAttribute('data-locked', 'false');
+                sidebarItem.title = `Click to preview ${sidebarItem.querySelector('.doc-item-title')?.textContent?.trim() || 'document'}`;
+                sidebarItem.onclick = (e) => handleArchiveDocumentClick(e, currentGeneratedDocId, false);
+                const badge = sidebarItem.querySelector('.sidebar-lock-badge');
+                if (badge) badge.remove();
+                const iconSvg = sidebarItem.querySelector('.doc-item-icon');
+                if (iconSvg) {
+                    iconSvg.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <line x1="16" y1="13" x2="8" y2="13"></line>
+                        <line x1="16" y1="17" x2="8" y2="17"></line>
+                    </svg>`;
+                }
+            }
+
+            closeDocumentSecurityModal();
+            alert('Security lock removed successfully. Document is now fully unlocked.');
+        } else {
+            alert('Unlock error: ' + (data.error || 'Incorrect security PIN.'));
+        }
+    } catch (err) {
+        alert('Communication error: ' + err.message);
+    }
+}
+
+/* ==========================================================================
+   Document Archive Access & PIN Verification
+   ========================================================================== */
+
+async function handleArchiveDocumentClick(event, docId, isLocked) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    pendingUnlockDocId = docId;
+
+    try {
+        const resp = await fetch(`/api/documents/${docId}/detail/`);
+        const data = await resp.json();
+
+        if (resp.ok) {
+            if (data.status === 'locked') {
+                // Show PIN prompt modal
+                const modal = document.getElementById('docPinUnlockModal');
+                const titleEl = document.getElementById('unlockDocTitle');
+                const hintWrap = document.getElementById('unlockDocHintWrap');
+                const hintText = document.getElementById('unlockDocHintText');
+                const pinInput = document.getElementById('unlockDocPin');
+                const errEl = document.getElementById('unlockErrorMessage');
+
+                if (titleEl) titleEl.textContent = data.title;
+                if (data.lock_hint) {
+                    if (hintWrap) hintWrap.style.display = 'block';
+                    if (hintText) hintText.textContent = data.lock_hint;
+                } else {
+                    if (hintWrap) hintWrap.style.display = 'none';
+                }
+
+                if (pinInput) pinInput.value = '';
+                if (errEl) errEl.style.display = 'none';
+
+                if (modal) modal.style.display = 'flex';
+                if (pinInput) pinInput.focus();
+            } else if (data.status === 'ok' && data.document) {
+                // Already unlocked in this session: load directly into Studio
+                loadDocumentIntoStudio(data.document);
+            }
+        }
+    } catch (err) {
+        console.warn('Error fetching locked document detail:', err);
+    }
+}
+
+function closePinUnlockModal() {
+    const modal = document.getElementById('docPinUnlockModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function handleVerifyPinSubmit(targetAction) {
+    if (!pendingUnlockDocId) return;
+
+    const pinInput = document.getElementById('unlockDocPin');
+    const errEl = document.getElementById('unlockErrorMessage');
+    const pin = pinInput ? pinInput.value.trim() : '';
+
+    if (!pin) {
+        if (errEl) {
+            errEl.textContent = 'Please enter your Security PIN.';
+            errEl.style.display = 'block';
+        }
+        return;
+    }
+
+    try {
+        const resp = await fetch(`/api/documents/${pendingUnlockDocId}/verify-pin/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify({ pin: pin })
+        });
+
+        const data = await resp.json();
+        if (resp.ok && data.status === 'ok') {
+            activeSessionPasscode = pin;
+            closePinUnlockModal();
+
+            if (targetAction === 'download_pdf') {
+                const pdfUrl = data.document.pdf_download_url || `/api/documents/${data.document.document_id}/pdf/?pin=${encodeURIComponent(pin)}&decrypted=1`;
+                window.location.href = pdfUrl;
+            } else if (targetAction === 'download') {
+                const docxUrl = data.document.download_url || `/api/documents/${data.document.document_id}/download/?pin=${encodeURIComponent(pin)}&decrypted=1`;
+                window.location.href = docxUrl;
+            } else {
+                loadDocumentIntoStudio(data.document);
+            }
+        } else {
+            if (errEl) {
+                errEl.textContent = data.error || 'Incorrect Security PIN. Unauthorized access denied.';
+                errEl.style.display = 'block';
+            }
+        }
+    } catch (err) {
+        if (errEl) {
+            errEl.textContent = 'Communication error: ' + err.message;
+            errEl.style.display = 'block';
+        }
+    }
+}
+
+function loadDocumentIntoStudio(doc) {
+    currentGeneratedDocId = doc.document_id || doc.id;
+    currentDocIsLocked = Boolean(doc.is_locked);
+    currentDocEncryptExport = Boolean(doc.encrypt_export);
+    currentDocLockHint = doc.lock_hint || '';
+
+    if (!doc.is_locked) {
+        activeSessionPasscode = '';
+    }
+
+    switchModalDocType(doc.doc_type, true); // preserve current generated doc context!
+
+    // Pre-populate input fields
+    if (doc.fields) {
+        for (const [key, val] of Object.entries(doc.fields)) {
+            const el = document.getElementById(`doc_field_${key}`);
+            if (el && val) el.value = val;
+        }
+        const refInput = document.getElementById('formRefNo');
+        const dateInput = document.getElementById('formDate');
+        const dateText = document.getElementById('formDateText');
+
+        if (refInput && doc.fields.reference_number) refInput.value = doc.fields.reference_number;
+        if (dateInput && doc.fields.date) {
+            dateInput.value = doc.fields.date;
+            if (dateText) dateText.textContent = doc.fields.date;
+            syncDateToPicker(doc.fields.date);
+        }
+        if (doc.fields.classification) {
+            setClassification(doc.fields.classification);
+        }
+    }
+
+    // Render live paper preview with actual content
+    const container = document.getElementById('docPreviewContainer');
+    if (container) {
+        container.innerHTML = renderDocumentPaperPreview(doc, doc.fields);
+        attachPaperEditListeners();
+    }
+
+    const saveStatus = document.getElementById('paperSaveStatus');
+    if (saveStatus) {
+        saveStatus.textContent = 'Word doc synced';
+        saveStatus.classList.remove('dirty');
+    }
+
+    const sizeBadge = document.getElementById('downloadFileSizeBadge');
+    if (sizeBadge && doc.file_size) sizeBadge.textContent = doc.file_size;
+
+    updateStudioLockState(doc.is_locked, doc.encrypt_export);
+
+    // Open studio modal
+    const overlay = document.getElementById('documentModalOverlay');
+    if (overlay) overlay.classList.add('active');
+    setTimeout(resetStudioScroll, 50);
+}
+
+
+window.openDocumentSecurityModal = openDocumentSecurityModal;
+window.closeDocumentSecurityModal = closeDocumentSecurityModal;
+window.togglePasscodeVisibility = togglePasscodeVisibility;
+window.handleApplyDocumentLock = handleApplyDocumentLock;
+window.handleRemoveDocumentLock = handleRemoveDocumentLock;
+window.handleArchiveDocumentClick = handleArchiveDocumentClick;
+window.handleHistoryDocumentClick = handleArchiveDocumentClick;
+
+// Delegate document link clicks anywhere in the chat to open studio preview window
+document.addEventListener('click', (e) => {
+    const link = e.target.closest('a[href*="/api/documents/"]');
+    if (link && !link.classList.contains('doc-sidebar-item')) {
+        const match = link.href.match(/\/api\/documents\/([0-9a-fA-F-]+)\//);
+        if (match && match[1]) {
+            e.preventDefault();
+            handleArchiveDocumentClick(e, match[1], false);
+        }
+    }
+});
+window.closePinUnlockModal = closePinUnlockModal;
+window.handleVerifyPinSubmit = handleVerifyPinSubmit;
+window.loadDocumentIntoStudio = loadDocumentIntoStudio;
+window.handleDocumentPdfDownload = handleDocumentPdfDownload;
+
+/* ==========================================================================
+   Officer Profile & Digital Signature Management
+   ========================================================================== */
+
+function openProfileSettingsModal(e) {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    const modal = document.getElementById('profileSettingsModal');
+    if (!modal) return;
+
+    const fnInput = document.getElementById('profFirstName');
+    const lnInput = document.getElementById('profLastName');
+    const rankInput = document.getElementById('profRank');
+    const appInput = document.getElementById('profAppointment');
+    const authInput = document.getElementById('profAuthority');
+    const deptInput = document.getElementById('profDepartment');
+    const empInput = document.getElementById('profEmployeeId');
+    const msgEl = document.getElementById('profSaveMessage');
+
+    if (fnInput) fnInput.value = window.USER_FIRST_NAME || '';
+    if (lnInput) lnInput.value = window.USER_LAST_NAME || '';
+    if (rankInput) rankInput.value = window.USER_RANK || '';
+    if (appInput) appInput.value = window.USER_APPOINTMENT || '';
+    if (authInput) authInput.value = window.USER_AUTHORITY || '';
+    if (deptInput) deptInput.value = window.USER_DEPT || 'Combat Engineering Wing';
+    if (empInput) empInput.value = window.USER_EMP_ID || '';
+    if (msgEl) msgEl.style.display = 'none';
+
+    const sigStyle = window.USER_SIG_STYLE || 'military';
+    const radios = document.querySelectorAll('input[name="profSigStyle"]');
+    radios.forEach(r => {
+        r.checked = (r.value === sigStyle);
+    });
+
+    modal.style.display = 'flex';
+}
+
+function closeProfileSettingsModal() {
+    const modal = document.getElementById('profileSettingsModal');
+    if (modal) modal.style.display = 'none';
+}
+
+async function handleSaveProfileSettings() {
+    const fnInput = document.getElementById('profFirstName');
+    const lnInput = document.getElementById('profLastName');
+    const rankInput = document.getElementById('profRank');
+    const appInput = document.getElementById('profAppointment');
+    const authInput = document.getElementById('profAuthority');
+    const deptInput = document.getElementById('profDepartment');
+    const empInput = document.getElementById('profEmployeeId');
+    const sigRadio = document.querySelector('input[name="profSigStyle"]:checked');
+    const msgEl = document.getElementById('profSaveMessage');
+    const btnSave = document.getElementById('btnSaveProfile');
+
+    const payload = {
+        first_name: fnInput ? fnInput.value.trim() : '',
+        last_name: lnInput ? lnInput.value.trim() : '',
+        rank: rankInput ? rankInput.value.trim() : '',
+        appointment: appInput ? appInput.value.trim() : '',
+        authority: authInput ? authInput.value.trim() : '',
+        department: deptInput ? deptInput.value.trim() : 'Combat Engineering Wing',
+        employee_id: empInput ? empInput.value.trim() : '',
+        signature_style: sigRadio ? sigRadio.value : 'military'
+    };
+
+    if (btnSave) btnSave.disabled = true;
+
+    try {
+        const resp = await fetch('/api/profile/update/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': getCsrfToken()
+            },
+            body: JSON.stringify(payload)
+        });
+
+        const data = await resp.json();
+        if (resp.ok && data.status === 'ok') {
+            const prof = data.profile;
+            window.USER_NAME = prof.display_name;
+            window.USER_FIRST_NAME = prof.first_name;
+            window.USER_LAST_NAME = prof.last_name;
+            window.USER_RANK = prof.rank;
+            window.USER_APPOINTMENT = prof.appointment;
+            window.USER_AUTHORITY = prof.authority;
+            window.USER_DEPT = prof.department;
+            window.USER_EMP_ID = prof.employee_id;
+            window.USER_SIG_STYLE = prof.signature_style;
+
+            // Update sidebar footer
+            const sName = document.getElementById('sidebarUserName');
+            const sSub = document.getElementById('sidebarUserSub');
+            const sAvatar = document.getElementById('sidebarUserAvatar');
+            if (sName) sName.textContent = prof.display_name;
+            if (sSub) {
+                const parts = [];
+                if (prof.rank) parts.push(prof.rank);
+                if (prof.department) parts.push(prof.department);
+                sSub.textContent = parts.join(' • ') || `ID: ${prof.employee_id || 'User'}`;
+            }
+            if (sAvatar && prof.display_name) {
+                sAvatar.textContent = prof.display_name.charAt(0).toUpperCase();
+            }
+
+            // Sync studio left-pane signatory inputs if present
+            const inName = document.getElementById('doc_field_from_name');
+            const inRank = document.getElementById('doc_field_from_rank');
+            const inApp = document.getElementById('doc_field_from_appointment');
+            const inAuth = document.getElementById('doc_field_from_authority');
+            const inDept = document.getElementById('doc_field_from_department');
+            if (inName && !inName.value) inName.value = prof.display_name;
+            if (inRank && !inRank.value) inRank.value = prof.rank;
+            if (inApp && !inApp.value) inApp.value = prof.appointment;
+            if (inAuth && !inAuth.value) inAuth.value = prof.authority;
+            if (inDept && !inDept.value) inDept.value = prof.department;
+
+            if (msgEl) {
+                msgEl.textContent = 'Officer credentials updated successfully!';
+                msgEl.style.color = '#15803d';
+                msgEl.style.background = '#dcfce7';
+                msgEl.style.display = 'block';
+            }
+
+            setTimeout(() => {
+                closeProfileSettingsModal();
+            }, 600);
+        } else {
+            if (msgEl) {
+                msgEl.textContent = data.error || 'Failed to update profile';
+                msgEl.style.color = '#b91c1c';
+                msgEl.style.background = '#fee2e2';
+                msgEl.style.display = 'block';
+            }
+        }
+    } catch (err) {
+        if (msgEl) {
+            msgEl.textContent = 'Communication error: ' + err.message;
+            msgEl.style.color = '#b91c1c';
+            msgEl.style.background = '#fee2e2';
+            msgEl.style.display = 'block';
+        }
+    } finally {
+        if (btnSave) btnSave.disabled = false;
+    }
+}
+
+/* In-Studio Quick Signature Editor */
+let currentPreviewSigStyle = 'military';
+
+function openSignatureQuickModal(e) {
+    if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+    const modal = document.getElementById('signatureQuickModal');
+    if (!modal) return;
+
+    const nameEl = document.getElementById('docPaperSignName');
+    const rankEl = document.getElementById('docPaperSignRank');
+    const appEl = document.getElementById('docPaperSignAppointment');
+    const authEl = document.getElementById('docPaperSignAuthority');
+
+    const qName = document.getElementById('quickSignName');
+    const qRank = document.getElementById('quickSignRank');
+    const qApp = document.getElementById('quickSignApp');
+    const qAuth = document.getElementById('quickSignAuth');
+
+    if (qName) qName.value = nameEl ? nameEl.textContent.replace(/[()]/g, '').trim() : (window.USER_NAME || '');
+    if (qRank) qRank.value = rankEl ? rankEl.textContent.trim() : (window.USER_RANK || '');
+    if (qApp) qApp.value = appEl ? appEl.textContent.trim() : (window.USER_APPOINTMENT || '');
+    if (qAuth) qAuth.value = authEl ? authEl.textContent.trim() : (window.USER_AUTHORITY || '');
+
+    const radios = document.querySelectorAll('input[name="quickSigStyle"]');
+    radios.forEach(r => {
+        r.checked = (r.value === currentPreviewSigStyle);
+    });
+
+    modal.style.display = 'flex';
+}
+
+function closeSignatureQuickModal() {
+    const modal = document.getElementById('signatureQuickModal');
+    if (modal) modal.style.display = 'none';
+}
+
+function handleSaveQuickSignature() {
+    const qName = document.getElementById('quickSignName');
+    const qRank = document.getElementById('quickSignRank');
+    const qApp = document.getElementById('quickSignApp');
+    const qAuth = document.getElementById('quickSignAuth');
+    const qStyle = document.querySelector('input[name="quickSigStyle"]:checked');
+
+    const nameVal = qName ? qName.value.trim() : '';
+    const rankVal = qRank ? qRank.value.trim() : '';
+    const appVal = qApp ? qApp.value.trim() : '';
+    const authVal = qAuth ? qAuth.value.trim() : '';
+    if (qStyle) currentPreviewSigStyle = qStyle.value;
+
+    // Update left-pane form fields
+    const inName = document.getElementById('doc_field_from_name');
+    const inRank = document.getElementById('doc_field_from_rank');
+    const inApp = document.getElementById('doc_field_from_appointment');
+    const inAuth = document.getElementById('doc_field_from_authority');
+    if (inName) inName.value = nameVal;
+    if (inRank) inRank.value = rankVal;
+    if (inApp) inApp.value = appVal;
+    if (inAuth) inAuth.value = authVal;
+
+    // Re-render paper preview with updated fields and style
+    const fields = extractPaperAllFields();
+    fields.from_name = nameVal;
+    fields.from_rank = rankVal;
+    fields.from_appointment = appVal;
+    fields.from_authority = authVal;
+    fields.signature_style = currentPreviewSigStyle;
+
+    const container = document.getElementById('docPreviewContainer');
+    if (container) {
+        const dummyDoc = {
+            doc_type: currentDocType,
+            generated_content: extractPaperBodyText()
+        };
+        container.innerHTML = renderDocumentPaperPreview(dummyDoc, fields);
+        attachPaperEditListeners();
+    }
+
+    closeSignatureQuickModal();
+    saveDocumentContentChanges();
+}
+
+function togglePreviewSigStyle() {
+    currentPreviewSigStyle = (currentPreviewSigStyle === 'eoffice') ? 'military' : 'eoffice';
+    const fields = extractPaperAllFields();
+    fields.signature_style = currentPreviewSigStyle;
+
+    const container = document.getElementById('docPreviewContainer');
+    if (container) {
+        const dummyDoc = {
+            doc_type: currentDocType,
+            generated_content: extractPaperBodyText()
+        };
+        container.innerHTML = renderDocumentPaperPreview(dummyDoc, fields);
+        attachPaperEditListeners();
+    }
+    saveDocumentContentChanges();
+}
+
+window.openProfileSettingsModal = openProfileSettingsModal;
+window.closeProfileSettingsModal = closeProfileSettingsModal;
+window.handleSaveProfileSettings = handleSaveProfileSettings;
+window.openSignatureQuickModal = openSignatureQuickModal;
+window.closeSignatureQuickModal = closeSignatureQuickModal;
+window.handleSaveQuickSignature = handleSaveQuickSignature;
+window.togglePreviewSigStyle = togglePreviewSigStyle;

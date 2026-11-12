@@ -2,18 +2,37 @@ import json
 import os
 import time
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import JsonResponse, StreamingHttpResponse, HttpResponseForbidden, Http404
+from django.http import JsonResponse, StreamingHttpResponse, HttpResponseForbidden, Http404, FileResponse, HttpResponse
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_GET
 from django.utils import timezone
 from django.conf import settings
+from django.core.files.base import ContentFile
 
-from .models import Conversation, Message, UploadedFile, UserProfile
+from .models import Conversation, Message, UploadedFile, UserProfile, GeneratedDocument
 from .forms import UserRegistrationForm, UserLoginForm
 from .ollama_client import ollama_client
 from .file_parser import extract_text_from_file
+
+# Document Agent & Engine imports
+from .agents.keyword_detector import (
+    detect_document_type,
+    get_all_document_types,
+    DOCUMENT_TYPE_LABELS,
+    DOCUMENT_TYPE_ICONS,
+)
+from .agents.field_extractor import (
+    get_required_fields,
+    get_optional_fields,
+)
+from .agents.orchestrator import (
+    start_document_session,
+    process_field_response,
+    create_document,
+    revise_document,
+)
 
 
 def login_view(request):
@@ -78,11 +97,19 @@ def chat_home(request, conversation_id=None):
         active_conversation = get_object_or_404(Conversation, id=conversation_id, user=user)
         messages = active_conversation.messages.all().prefetch_related('attached_files')
 
-    # Get employee details
-    profile = getattr(user, 'profile', None)
+    # Get employee & officer details
+    profile, _ = UserProfile.objects.get_or_create(user=user)
     employee_display = f"{user.first_name} {user.last_name}".strip() or user.username
-    employee_id = profile.employee_id if profile else ''
-    department = profile.department if profile else ''
+    employee_id = profile.employee_id
+    department = profile.department or 'Combat Engineering Wing'
+    rank = profile.rank or ''
+    appointment = profile.appointment or ''
+    authority = profile.authority or ''
+    signature_style = profile.signature_style or 'military'
+    signature_text = profile.signature_text or ''
+
+    # Get recent generated documents for quick access
+    recent_documents = GeneratedDocument.objects.filter(user=user)[:10]
 
     context = {
         'conversations': conversations,
@@ -91,9 +118,17 @@ def chat_home(request, conversation_id=None):
         'models': models,
         'default_model': default_model,
         'employee_display': employee_display,
+        'first_name': user.first_name,
+        'last_name': user.last_name,
         'employee_id': employee_id,
         'department': department,
+        'rank': rank,
+        'appointment': appointment,
+        'authority': authority,
+        'signature_style': signature_style,
+        'signature_text': signature_text,
         'ollama_healthy': ollama_client.check_health(),
+        'recent_documents': recent_documents,
     }
     return render(request, 'chat/index.html', context)
 
@@ -351,3 +386,518 @@ def send_message_stream(request, conversation_id):
     response['Cache-Control'] = 'no-cache'
     response['X-Accel-Buffering'] = 'no'
     return response
+
+
+# ==============================================================================
+# DOCUMENT CREATION AGENT API ENDPOINTS
+# Minimal LLM usage — 1 LLM call for generation, everything else in Python
+# ==============================================================================
+
+@login_required
+@require_GET
+def list_document_types_api(request):
+    """Return available document types with labels, icons, and fields."""
+    types = get_all_document_types()
+    for t in types:
+        t['required_fields'] = get_required_fields(t['type'])
+        t['optional_fields'] = get_optional_fields(t['type'])
+    return JsonResponse({'document_types': types})
+
+
+@login_required
+@require_POST
+def detect_document_type_api(request):
+    """Detect document type from user input string via keyword regex (0 LLM calls)."""
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = {}
+    message = data.get('message', '').strip()
+    doc_type, confidence = detect_document_type(message)
+    label = DOCUMENT_TYPE_LABELS.get(doc_type, '') if doc_type else ''
+    icon = DOCUMENT_TYPE_ICONS.get(doc_type, '') if doc_type else ''
+    return JsonResponse({
+        'doc_type': doc_type,
+        'confidence': confidence,
+        'label': label,
+        'icon': icon,
+    })
+
+
+@login_required
+@require_POST
+def start_document_session_api(request):
+    """Initialize a document session with profile defaults and check missing fields (0 LLM calls)."""
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = {}
+    doc_type = data.get('doc_type', 'formal_letter')
+    initial_message = data.get('initial_message', '')
+    session = start_document_session(request.user, doc_type, initial_message)
+    return JsonResponse(session)
+
+
+@login_required
+@require_POST
+def generate_document_api(request):
+    """Run single-LLM generation and assemble DOCX (1 LLM call)."""
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    doc_type = data.get('doc_type')
+    collected_fields = data.get('collected_fields', {})
+    model_name = data.get('model_name')
+    conversation_id = data.get('conversation_id')
+
+    if not doc_type or not collected_fields:
+        return JsonResponse({'error': 'Missing doc_type or collected_fields'}, status=400)
+
+    conversation = None
+    if conversation_id:
+        conversation = Conversation.objects.filter(id=conversation_id, user=request.user).first()
+
+    session_data = {
+        'doc_type': doc_type,
+        'collected_fields': collected_fields,
+    }
+
+    security_pin = data.get('security_pin', '').strip()
+    lock_hint = data.get('lock_hint', '').strip()
+    encrypt_export = bool(data.get('encrypt_export', False))
+
+    try:
+        doc_info = create_document(
+            user=request.user,
+            session_data=session_data,
+            model_name=model_name,
+            conversation=conversation,
+        )
+
+        if security_pin and len(security_pin) >= 4:
+            doc_obj = GeneratedDocument.objects.get(id=doc_info['document_id'])
+            doc_obj.set_lock_pin(security_pin, hint=lock_hint, encrypt_export=encrypt_export)
+            request.session[f'unlocked_doc_{doc_obj.id}'] = True
+            doc_info['is_locked'] = True
+            doc_info['lock_hint'] = lock_hint
+            doc_info['encrypt_export'] = encrypt_export
+
+        # Record assistant card message in conversation if present
+        if conversation:
+            card_content = (
+                f"### 📄 {doc_info['doc_type_label']}: {doc_info['title']}\n\n"
+                f"{doc_info['generated_content']}\n\n"
+                f"**[Download Document ({doc_info['file_size']})]({doc_info['download_url']})**"
+            )
+            Message.objects.create(
+                conversation=conversation,
+                role='assistant',
+                content=card_content,
+                response_time=doc_info.get('generation_time'),
+            )
+            conversation.updated_at = timezone.now()
+            conversation.save(update_fields=['updated_at'])
+
+        return JsonResponse({'status': 'ok', 'document': doc_info})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def revise_document_api(request, document_id):
+    """Revise an existing document via single LLM revision call or fresh retry."""
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = {}
+
+    instruction = data.get('instruction', '').strip()
+
+    try:
+        doc_info = revise_document(document_id, instruction, user=request.user)
+        return JsonResponse({'status': 'ok', 'document': doc_info})
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
+
+
+@login_required
+@require_POST
+def update_document_text_api(request, document_id):
+    """Update document body content directly from preview editor and rebuild DOCX (0 LLM calls)."""
+    doc = get_object_or_404(GeneratedDocument, id=document_id, user=request.user)
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    content = data.get('content', '').strip()
+    if not content:
+        return JsonResponse({'error': 'Document content cannot be empty'}, status=400)
+
+    try:
+        fields = json.loads(doc.fields_json) if doc.fields_json else {}
+    except Exception:
+        fields = {}
+
+    incoming_fields = data.get('fields')
+    if isinstance(incoming_fields, dict):
+        fields.update(incoming_fields)
+        doc.fields_json = json.dumps(fields)
+        new_title = fields.get('subject') or fields.get('title') or fields.get('meeting_title')
+        if new_title:
+            doc.title = str(new_title)[:255]
+
+    from chat.document_engine.docx_builder import build_document
+    docx_bytes = build_document(doc.document_type, fields, content)
+
+    doc.generated_content = content
+    doc.file_size = len(docx_bytes)
+
+    filename = os.path.basename(doc.file.name) if doc.file else f"{doc.document_type}_{doc.id}.docx"
+    doc.file.save(filename, ContentFile(docx_bytes), save=False)
+    doc.save(update_fields=['generated_content', 'file_size', 'file', 'fields_json', 'title'])
+
+    return JsonResponse({
+        'status': 'ok',
+        'document_id': str(doc.id),
+        'file_size': doc.format_size(),
+        'title': doc.title,
+        'download_url': f"/api/documents/{doc.id}/download/",
+        'pdf_download_url': f"/api/documents/{doc.id}/pdf/",
+    })
+
+
+@login_required
+@require_GET
+def download_document_api(request, document_id):
+    """Download generated DOCX file with optional passcode encryption (0 LLM calls)."""
+    doc = get_object_or_404(GeneratedDocument, id=document_id, user=request.user)
+    if not doc.file or not os.path.exists(doc.file.path):
+        raise Http404("Document file not found on disk")
+
+    pin_attempt = request.GET.get('pin') or request.GET.get('passcode') or ''
+    is_session_unlocked = request.session.get(f'unlocked_doc_{doc.id}', False)
+
+    # Check In-App PIN lock if locked
+    if doc.is_locked and not is_session_unlocked:
+        if not pin_attempt or not doc.check_lock_pin(pin_attempt):
+            return JsonResponse({'error': 'Document is PIN-locked. Valid passcode required.'}, status=403)
+        request.session[f'unlocked_doc_{doc.id}'] = True
+
+    # Check if clean decrypted export was requested
+    is_decrypted = request.GET.get('decrypted') in ('1', 'true', 'yes') or request.GET.get('plain') in ('1', 'true', 'yes')
+
+    # Determine encryption password
+    enc_password = None
+    if not is_decrypted:
+        if request.GET.get('passcode'):
+            enc_password = request.GET.get('passcode').strip()
+        elif request.GET.get('encrypted') in ('1', 'true') and pin_attempt:
+            enc_password = pin_attempt.strip()
+        elif doc.is_locked and doc.encrypt_export and not is_session_unlocked and pin_attempt:
+            enc_password = pin_attempt.strip()
+
+    if enc_password and enc_password.strip():
+        try:
+            from msoffcrypto.method.ecma376_agile import ECMA376Agile
+            from django.http import HttpResponse
+
+            with open(doc.file.path, 'rb') as f:
+                enc_bytes = ECMA376Agile.encrypt(enc_password.strip(), f)
+
+            response = HttpResponse(
+                enc_bytes,
+                content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+            )
+            base_filename = os.path.basename(doc.file.name)
+            response['Content-Disposition'] = f'attachment; filename="{base_filename}"'
+            return response
+        except Exception as e:
+            # Fallback to standard file response if encryption fails
+            pass
+
+    return FileResponse(
+        open(doc.file.path, 'rb'),
+        as_attachment=True,
+        filename=os.path.basename(doc.file.name),
+        content_type='application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    )
+
+
+
+
+@login_required
+@require_GET
+def download_pdf_api(request, document_id):
+    """Download generated document as military-standard A4 PDF with optional AES-256 encryption."""
+    doc = get_object_or_404(GeneratedDocument, id=document_id, user=request.user)
+
+    pin_attempt = request.GET.get('pin') or request.GET.get('passcode') or ''
+    is_session_unlocked = request.session.get(f'unlocked_doc_{doc.id}', False)
+
+    # Check In-App PIN lock if locked
+    if doc.is_locked and not is_session_unlocked:
+        if not pin_attempt or not doc.check_lock_pin(pin_attempt):
+            return JsonResponse({'error': 'Document is PIN-locked. Valid passcode required.'}, status=403)
+        request.session[f'unlocked_doc_{doc.id}'] = True
+
+    # Check if clean decrypted export was requested
+    is_decrypted = request.GET.get('decrypted') in ('1', 'true', 'yes') or request.GET.get('plain') in ('1', 'true', 'yes')
+
+    # Determine encryption password
+    enc_password = None
+    if not is_decrypted:
+        if request.GET.get('passcode'):
+            enc_password = request.GET.get('passcode').strip()
+        elif request.GET.get('encrypted') in ('1', 'true') and pin_attempt:
+            enc_password = pin_attempt.strip()
+        elif doc.is_locked and doc.encrypt_export and not is_session_unlocked and pin_attempt:
+            enc_password = pin_attempt.strip()
+
+    try:
+        fields = json.loads(doc.fields_json) if doc.fields_json else {}
+    except Exception:
+        fields = {}
+
+    import re
+    from chat.document_engine.pdf_builder import build_pdf_document
+
+    try:
+        pdf_bytes = build_pdf_document(
+            doc_type=doc.document_type,
+            fields=fields,
+            body_content=doc.generated_content or '',
+            passcode=enc_password
+        )
+    except Exception as e:
+        return JsonResponse({'error': f'PDF generation failed: {str(e)}'}, status=500)
+
+    clean_title = re.sub(r'[^A-Za-z0-9_\-\.]', '_', doc.title or doc.document_type)[:50]
+    filename = f"{clean_title}.pdf"
+
+    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+@login_required
+@require_POST
+def toggle_document_lock_api(request, document_id):
+    """Set or remove PIN lock and export encryption for a document."""
+    doc = get_object_or_404(GeneratedDocument, id=document_id, user=request.user)
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = {}
+
+    action = data.get('action', 'lock')
+    pin = data.get('pin', '').strip()
+    hint = data.get('hint', '').strip()
+    encrypt_export = bool(data.get('encrypt_export', True))
+
+    if action == 'lock':
+        if len(pin) < 4:
+            return JsonResponse({'error': 'Security PIN / Passcode must be at least 4 characters'}, status=400)
+        doc.set_lock_pin(pin, hint=hint, encrypt_export=encrypt_export)
+        request.session[f'unlocked_doc_{doc.id}'] = True
+        return JsonResponse({
+            'status': 'ok',
+            'is_locked': True,
+            'encrypt_export': doc.encrypt_export,
+            'lock_hint': doc.lock_hint,
+            'message': 'Document locked with military security PIN.'
+        })
+    elif action == 'unlock':
+        is_session_unlocked = request.session.get(f'unlocked_doc_{doc.id}', False)
+        # Allow unlock if current session is already authenticated OR if correct PIN is provided
+        if not is_session_unlocked and not doc.check_lock_pin(pin):
+            return JsonResponse({'error': 'Incorrect PIN. Cannot remove security lock.'}, status=403)
+        doc.remove_lock()
+        request.session.pop(f'unlocked_doc_{doc.id}', None)
+        return JsonResponse({
+            'status': 'ok',
+            'is_locked': False,
+            'encrypt_export': False,
+            'message': 'Security lock removed successfully.'
+        })
+    else:
+        return JsonResponse({'error': 'Invalid action'}, status=400)
+
+
+@login_required
+@require_POST
+def verify_document_pin_api(request, document_id):
+    """Verify PIN for locked document access."""
+    doc = get_object_or_404(GeneratedDocument, id=document_id, user=request.user)
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        data = {}
+
+    pin = data.get('pin', '').strip()
+    if not doc.check_lock_pin(pin):
+        return JsonResponse({'error': 'Incorrect Security PIN. Access denied.'}, status=403)
+
+    request.session[f'unlocked_doc_{doc.id}'] = True
+
+    try:
+        fields = json.loads(doc.fields_json) if doc.fields_json else {}
+    except Exception:
+        fields = {}
+
+    return JsonResponse({
+        'status': 'ok',
+        'document': {
+            'document_id': str(doc.id),
+            'title': doc.title,
+            'doc_type': doc.document_type,
+            'doc_type_label': DOCUMENT_TYPE_LABELS.get(doc.document_type, doc.document_type),
+            'generated_content': doc.generated_content,
+            'fields': fields,
+            'version': doc.version,
+            'file_size': doc.format_size(),
+            'is_locked': doc.is_locked,
+            'lock_hint': doc.lock_hint,
+            'encrypt_export': doc.encrypt_export,
+            'download_url': f"/api/documents/{doc.id}/download/?pin={pin}&decrypted=1",
+            'pdf_download_url': f"/api/documents/{doc.id}/pdf/?pin={pin}&decrypted=1",
+            'encrypted_download_url': f"/api/documents/{doc.id}/download/?pin={pin}&passcode={pin}",
+            'encrypted_pdf_download_url': f"/api/documents/{doc.id}/pdf/?pin={pin}&passcode={pin}",
+        }
+    })
+
+
+@login_required
+@require_GET
+def get_document_detail_api(request, document_id):
+    """Retrieve document details; checks lock status."""
+    doc = get_object_or_404(GeneratedDocument, id=document_id, user=request.user)
+
+    is_session_unlocked = request.session.get(f'unlocked_doc_{doc.id}', False)
+    pin_attempt = request.GET.get('pin') or ''
+    if pin_attempt and doc.check_lock_pin(pin_attempt):
+        is_session_unlocked = True
+        request.session[f'unlocked_doc_{doc.id}'] = True
+
+    # Locked documents require PIN authentication when accessed from history
+    if doc.is_locked and not is_session_unlocked:
+        return JsonResponse({
+            'status': 'locked',
+            'document_id': str(doc.id),
+            'title': doc.title,
+            'doc_type': doc.document_type,
+            'is_locked': True,
+            'lock_hint': doc.lock_hint,
+            'file_size': doc.format_size(),
+        })
+
+    try:
+        fields = json.loads(doc.fields_json) if doc.fields_json else {}
+    except Exception:
+        fields = {}
+
+    return JsonResponse({
+        'status': 'ok',
+        'document': {
+            'document_id': str(doc.id),
+            'title': doc.title,
+            'doc_type': doc.document_type,
+            'doc_type_label': DOCUMENT_TYPE_LABELS.get(doc.document_type, doc.document_type),
+            'generated_content': doc.generated_content,
+            'fields': fields,
+            'version': doc.version,
+            'file_size': doc.format_size(),
+            'is_locked': doc.is_locked,
+            'lock_hint': doc.lock_hint,
+            'encrypt_export': doc.encrypt_export,
+            'download_url': f"/api/documents/{doc.id}/download/",
+            'pdf_download_url': f"/api/documents/{doc.id}/pdf/",
+        }
+    })
+
+
+@login_required
+@require_GET
+def list_user_documents_api(request):
+    """List documents generated by the user (0 LLM calls)."""
+    docs = GeneratedDocument.objects.filter(user=request.user)[:30]
+    results = []
+    for d in docs:
+        results.append({
+            'id': str(d.id),
+            'title': d.title,
+            'doc_type': d.document_type,
+            'label': DOCUMENT_TYPE_LABELS.get(d.document_type, d.document_type),
+            'version': d.version,
+            'file_size': d.format_size(),
+            'model_used': d.model_used,
+            'is_locked': d.is_locked,
+            'lock_hint': d.lock_hint,
+            'encrypt_export': d.encrypt_export,
+            'created_at': d.created_at.strftime('%d %b %Y %H:%M'),
+            'download_url': f"/api/documents/{d.id}/download/",
+            'pdf_download_url': f"/api/documents/{d.id}/pdf/",
+        })
+    return JsonResponse({'documents': results})
+
+
+@login_required
+@require_POST
+def update_profile_api(request):
+    """Update officer profile credentials and digital signature preferences."""
+    try:
+        data = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return JsonResponse({'error': 'Invalid JSON body'}, status=400)
+
+    user = request.user
+    first_name = data.get('first_name', '').strip()
+    last_name = data.get('last_name', '').strip()
+    user_updated = False
+    if 'first_name' in data:
+        user.first_name = first_name
+        user_updated = True
+    if 'last_name' in data:
+        user.last_name = last_name
+        user_updated = True
+    if user_updated:
+        user.save(update_fields=['first_name', 'last_name'])
+
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    if 'employee_id' in data:
+        profile.employee_id = str(data['employee_id']).strip()
+    if 'department' in data:
+        profile.department = str(data['department']).strip() or 'Combat Engineering Wing'
+    if 'rank' in data:
+        profile.rank = str(data['rank']).strip()
+    if 'appointment' in data:
+        profile.appointment = str(data['appointment']).strip()
+    if 'authority' in data:
+        profile.authority = str(data['authority']).strip()
+    if 'signature_style' in data:
+        profile.signature_style = str(data['signature_style']).strip() or 'military'
+    if 'signature_text' in data:
+        profile.signature_text = str(data['signature_text']).strip()
+
+    profile.save()
+
+    display_name = f"{user.first_name} {user.last_name}".strip() or user.username
+
+    return JsonResponse({
+        'status': 'ok',
+        'profile': {
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'display_name': display_name,
+            'employee_id': profile.employee_id,
+            'department': profile.department,
+            'rank': profile.rank,
+            'appointment': profile.appointment,
+            'authority': profile.authority,
+            'signature_style': profile.signature_style,
+            'signature_text': profile.signature_text,
+        }
+    })
