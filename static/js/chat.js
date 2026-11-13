@@ -3842,6 +3842,14 @@ function printPdfFrame() {
     }
 }
 
+function openPdfInNewTab() {
+    const frame = document.getElementById('pdfPreviewFrame');
+    if (frame && frame.src) {
+        window.open(frame.src, '_blank');
+    }
+}
+window.openPdfInNewTab = openPdfInNewTab;
+
 // Global Keyboard Shortcuts
 document.addEventListener('keydown', function(e) {
     // 1. Ctrl+Enter or Cmd+Enter -> Send message in chat or confirm in studio

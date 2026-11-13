@@ -176,7 +176,8 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 # SQLite WAL mode for higher concurrent read/write throughput on air-gapped node
 SQLITE_WAL_MODE = True
 
-
+# Allow same-origin iframes for in-app PDF preview modal
+X_FRAME_OPTIONS = 'SAMEORIGIN'
 
 # Session Security & Workstation Protection
 SESSION_COOKIE_AGE = int(os.environ.get('DJANGO_SESSION_COOKIE_AGE', 7200))  # 2 hours

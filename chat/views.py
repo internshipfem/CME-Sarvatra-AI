@@ -7,6 +7,7 @@ from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST, require_GET
+from django.views.decorators.clickjacking import xframe_options_sameorigin
 from django.utils import timezone
 from django.conf import settings
 from django.core.files.base import ContentFile
@@ -687,6 +688,7 @@ def download_document_api(request, document_id):
 
 @login_required
 @require_GET
+@xframe_options_sameorigin
 def download_pdf_api(request, document_id):
     """Download generated document as military-standard A4 PDF with optional AES-256 encryption."""
     doc = get_object_or_404(GeneratedDocument, id=document_id, user=request.user)

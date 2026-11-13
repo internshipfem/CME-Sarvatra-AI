@@ -558,7 +558,7 @@
                         </div>
 
                         <!-- Dynamic Fields Form -->
-                        <form id="docGeneratorForm" onsubmit="event.preventDefault(); submitGenerateDocument();">
+                        <form id="docGeneratorForm" onsubmit="event.preventDefault(); submitGenerateDocument();" autocomplete="off" data-lpignore="true">
                             <div id="dynamicFormFields" class="dynamic-fields-container">
                                 <!-- Fields dynamically injected based on document archetype -->
                             </div>
@@ -689,8 +689,15 @@
                             <input 
                                 type="text" 
                                 id="docRegenerateComment" 
+                                name="studio_revision_instruction"
                                 class="studio-revision-input" 
                                 placeholder="Add revision instructions (e.g. 'Add clearance clause from Southern Command')..."
+                                autocomplete="off"
+                                autocorrect="off"
+                                autocapitalize="off"
+                                spellcheck="false"
+                                data-lpignore="true"
+                                data-form-type="other"
                                 oninput="updateRegenerateButtonLabel()"
                                 onkeydown="if(event.key === 'Enter') { event.preventDefault(); handleDocumentRegenerate(); }"
                             />
@@ -790,7 +797,7 @@
             <div class="sec-form-group">
                 <label class="sec-label">SECURITY PASSCODE / PIN <span class="req">*</span></label>
                 <div class="sec-input-wrap">
-                    <input type="password" id="secLockPin" class="sec-input font-mono" placeholder="Enter 4–12 char PIN / passcode..." maxlength="32" autocomplete="off" />
+                    <input type="password" id="secLockPin" class="sec-input font-mono" placeholder="Enter 4–12 char PIN / passcode..." maxlength="32" autocomplete="new-password" data-lpignore="true" />
                     <button type="button" class="sec-eye-btn" onclick="togglePasscodeVisibility('secLockPin')" title="Show/Hide">
                         👁
                     </button>
@@ -866,7 +873,7 @@
             <div class="sec-form-group" style="margin-top: 14px;">
                 <label class="sec-label">ENTER OFFICER PIN / PASSCODE</label>
                 <div class="sec-input-wrap">
-                    <input type="password" id="unlockDocPin" class="sec-input font-mono sec-input-lg" placeholder="••••" maxlength="32" onkeydown="if(event.key === 'Enter') handleVerifyPinSubmit('view')" />
+                    <input type="password" id="unlockDocPin" class="sec-input font-mono sec-input-lg" placeholder="••••" maxlength="32" autocomplete="new-password" data-lpignore="true" onkeydown="if(event.key === 'Enter') handleVerifyPinSubmit('view')" />
                     <button type="button" class="sec-eye-btn" onclick="togglePasscodeVisibility('unlockDocPin')">👁</button>
                 </div>
                 <div id="unlockErrorMessage" class="sec-error-text" style="display: none;"></div>
@@ -1028,6 +1035,7 @@
                 <span id="pdfPreviewTitle">Military Document Preview</span>
             </div>
             <div style="display: flex; gap: 8px; align-items: center;">
+                <button type="button" class="btn-sec-cancel" style="padding: 4px 10px; font-size: 0.75rem;" onclick="openPdfInNewTab()" title="Open PDF in new browser tab">Open in Tab</button>
                 <button type="button" class="btn-sec-cancel" style="padding: 4px 10px; font-size: 0.75rem;" onclick="printPdfFrame()">Print</button>
                 <button type="button" class="sec-modal-close" onclick="closePdfPreview()" style="background: none; border: none; color: #94a3b8; font-size: 20px; cursor: pointer; line-height: 1;">&times;</button>
             </div>
