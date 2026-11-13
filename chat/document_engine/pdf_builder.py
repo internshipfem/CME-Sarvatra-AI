@@ -56,7 +56,7 @@ def _build_digital_signature_box_html(from_name, from_rank, from_appointment, fr
                 b64 = base64.b64encode(f.read()).decode('utf-8')
             ext = signature_image_path.rsplit('.', 1)[-1].lower()
             mime = 'image/png' if ext == 'png' else 'image/jpeg'
-            sig_img_html = f'<div style="text-align: right; margin-bottom: 3px;"><img src="data:{mime};base64,{b64}" style="height: 36pt; max-width: 140pt; object-fit: contain;" /></div>'
+            sig_img_html = f'<div style="text-align: right; margin-bottom: 4px;"><img src="data:{mime};base64,{b64}" style="height: 65pt; max-width: 220pt; object-fit: contain;" /></div>'
         except Exception:
             sig_img_html = ''
 

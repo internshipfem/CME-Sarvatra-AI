@@ -3182,8 +3182,90 @@ body {
 }
 
 @media print {
-  .no-print, .paper-sig-quick-actions {
+  /* Complete Air-Gap Military Print Formatting */
+  body, html {
+    background: #ffffff !important;
+    color: #000000 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  
+  .sidebar,
+  .main-content,
+  .chat-container,
+  .app-header,
+  .studio-form-col,
+  .studio-modal-header,
+  .studio-preview-status-bar,
+  .studio-bottom-toolbar,
+  .no-print,
+  .paper-sig-quick-actions,
+  .live-status-dot,
+  .paper-save-status,
+  .sec-modal-overlay,
+  .toast-container {
     display: none !important;
+  }
+
+  .document-modal-overlay {
+    position: static !important;
+    background: #ffffff !important;
+    display: block !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  .studio-modal-container {
+    position: static !important;
+    border: none !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    height: auto !important;
+    display: block !important;
+  }
+
+  .studio-modal-body {
+    display: block !important;
+    height: auto !important;
+    padding: 0 !important;
+  }
+
+  .studio-preview-col {
+    display: block !important;
+    width: 100% !important;
+    height: auto !important;
+    background: #ffffff !important;
+  }
+
+  .studio-canvas-wrapper {
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    height: auto !important;
+    overflow: visible !important;
+    display: block !important;
+  }
+
+  .paper-sheet {
+    box-shadow: none !important;
+    border: none !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 10mm 15mm !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    page-break-inside: avoid !important;
+  }
+
+  .paper-editable {
+    outline: none !important;
+    border: none !important;
   }
 }
 
@@ -3198,8 +3280,8 @@ body {
 }
 
 .signature-svg {
-  width: 120px;
-  height: 32px;
+  width: 170px;
+  height: 50px;
   color: #1e293b;
   opacity: 0.88;
   margin-bottom: 4px;

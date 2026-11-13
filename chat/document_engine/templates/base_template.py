@@ -333,7 +333,7 @@ def add_military_signature_block(doc, from_name='', from_rank='', from_appointme
         if signature_image_path and os.path.exists(signature_image_path):
             try:
                 r_img = p_r.add_run()
-                r_img.add_picture(signature_image_path, height=Inches(0.45))
+                r_img.add_picture(signature_image_path, height=Inches(0.85))
                 p_r.add_run("\n")
             except Exception:
                 pass
@@ -414,7 +414,7 @@ def add_authority_signature_block(doc, from_name='', designation='Issuing Author
         if signature_image_path and os.path.exists(signature_image_path):
             try:
                 r_img = p.add_run()
-                r_img.add_picture(signature_image_path, height=Inches(0.45))
+                r_img.add_picture(signature_image_path, height=Inches(0.85))
                 p.add_run("\n")
             except Exception:
                 pass

@@ -2701,8 +2701,8 @@ function renderDocumentPaperPreview(doc, fields) {
         sigGraphicHtml = '<div class="mil-signature-line" style="height: 38px;"></div>';
     } else if (activeSigAsset && activeSigAsset.url) {
         sigGraphicHtml = `
-            <div class="mil-signature-line" style="min-height: 40px; display: flex; justify-content: flex-end; align-items: center; margin-bottom: 3px;">
-                <img src="${activeSigAsset.url}" alt="${escapeHtml(activeSigAsset.label)}" style="height: 38px; max-width: 140px; object-fit: contain; display: block;" />
+            <div class="mil-signature-line" style="min-height: 70px; display: flex; justify-content: flex-end; align-items: center; margin-bottom: 4px;">
+                <img src="${activeSigAsset.url}" alt="${escapeHtml(activeSigAsset.label)}" style="height: 68px; max-width: 220px; object-fit: contain; display: block;" />
             </div>
         `;
     } else {
@@ -2733,7 +2733,7 @@ function renderDocumentPaperPreview(doc, fields) {
                     </button>
                 </div>
                 <div class="eoffice-dsc-header">DIGITALLY SIGNED CERTIFICATE (DSC)</div>
-                ${activeSigAsset && activeSigAsset.url ? `<div style="text-align: center; margin: 4px 0;"><img src="${activeSigAsset.url}" style="height: 32px; max-width: 120px; object-fit: contain;" /></div>` : ""}
+                ${activeSigAsset && activeSigAsset.url ? `<div style="text-align: center; margin: 4px 0;"><img src="${activeSigAsset.url}" style="height: 52px; max-width: 180px; object-fit: contain;" /></div>` : ""}
                 <table class="eoffice-dsc-table">
                     <tr>
                         <td class="dsc-label">Signed by:</td>
@@ -3849,6 +3849,18 @@ function openPdfInNewTab() {
     }
 }
 window.openPdfInNewTab = openPdfInNewTab;
+
+function handleStudioPrint() {
+    if (currentGeneratedDocId) {
+        openPdfPreview(`/api/documents/${currentGeneratedDocId}/pdf/`);
+        setTimeout(() => {
+            printPdfFrame();
+        }, 600);
+    } else {
+        window.print();
+    }
+}
+window.handleStudioPrint = handleStudioPrint;
 
 // Global Keyboard Shortcuts
 document.addEventListener('keydown', function(e) {
