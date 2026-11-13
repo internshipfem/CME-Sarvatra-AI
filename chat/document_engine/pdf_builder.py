@@ -576,8 +576,8 @@ def build_pdf_document(doc_type, fields, body_content, passcode=None):
     total_pages = doc.page_count
 
     for i, page in enumerate(doc):
-        # Subtle diagonal DRAFT watermark unless explicitly finalized
-        is_draft = fields.get('_is_draft', True) and not fields.get('is_final', False)
+        # Subtle diagonal DRAFT watermark only when explicitly marked as draft
+        is_draft = bool(fields.get('_is_draft', False)) and not bool(fields.get('is_final', False))
         if is_draft:
             point = fitz.Point(140, 520)
             page.insert_text(

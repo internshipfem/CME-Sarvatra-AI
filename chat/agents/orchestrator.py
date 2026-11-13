@@ -167,6 +167,7 @@ def create_document(user, session_data, model_name=None, conversation=None):
         generation_time=result['generation_time'],
         file_size=len(docx_bytes),
         signature_asset=sig_asset,
+        is_final=True,
     )
     doc.file.save(filename, ContentFile(docx_bytes), save=True)
 

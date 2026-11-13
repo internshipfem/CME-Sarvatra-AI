@@ -3288,6 +3288,7 @@ function loadDocumentIntoStudio(doc) {
     if (sizeBadge && doc.file_size) sizeBadge.textContent = doc.file_size;
 
     updateStudioLockState(doc.is_locked, doc.encrypt_export);
+    updateFinalizeButtonState(doc.is_final !== undefined ? Boolean(doc.is_final) : true);
 
     // Open studio modal
     const overlay = document.getElementById('documentModalOverlay');
