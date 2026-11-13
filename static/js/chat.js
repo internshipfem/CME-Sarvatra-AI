@@ -2742,7 +2742,7 @@ function renderDocumentPaperPreview(doc, fields) {
                     ${(fromRank || fromApp) ? `
                     <tr>
                         <td class="dsc-label">Role:</td>
-                        <td class="dsc-val"><span id="docPaperSignRank" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit rank">${escapeHtml(fromRank)}</span>${(fromRank && fromApp) ? ', ' : ''}<span id="docPaperSignAppointment" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit appointment">${escapeHtml(fromApp)}</span></td>
+                        <td class="dsc-val"><span id="docPaperSignRank" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit rank">${escapeHtml(fromRank)}</span><span id="docPaperSignSep">${(fromRank && fromApp) ? ', ' : ''}</span><span id="docPaperSignAppointment" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit appointment">${escapeHtml(fromApp)}</span></td>
                     </tr>` : ''}
                     ${fromAuth ? `
                     <tr>
@@ -2780,7 +2780,7 @@ ${sigGraphicHtml}
                 </div>
                 ${(fromRank || fromApp) ? `
                 <div class="mil-signer-role">
-                    <span id="docPaperSignRank" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit Rank">${escapeHtml(fromRank)}</span>${(fromRank && fromApp) ? ', ' : ''}<span id="docPaperSignAppointment" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit Appointment">${escapeHtml(fromApp)}</span>
+                    <span id="docPaperSignRank" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit Rank">${escapeHtml(fromRank)}</span><span id="docPaperSignSep">${(fromRank && fromApp) ? ', ' : ''}</span><span id="docPaperSignAppointment" contenteditable="true" spellcheck="false" class="paper-editable" title="Click to edit Appointment">${escapeHtml(fromApp)}</span>
                 </div>` : ''}
                 ${fromAuth ? `
                 <div class="mil-signer-auth">
@@ -3829,7 +3829,8 @@ function openActivePdfPreview() {
         showToast('Please formulate or generate a document first', 'info');
         return;
     }
-    const docTitle = document.getElementById('docPaperSubj') ? document.getElementById('docPaperSubj').textContent.trim() : 'Official Document';
+    const titleEl = document.getElementById('docPaperSubjectText') || document.getElementById('docPaperSubj');
+    const docTitle = titleEl ? titleEl.textContent.trim() : 'Official Document';
     openPdfPreview(`/api/documents/${currentGeneratedDocId}/pdf/`, docTitle);
 }
 
@@ -3845,10 +3846,10 @@ function printPdfFrame() {
 document.addEventListener('keydown', function(e) {
     // 1. Ctrl+Enter or Cmd+Enter -> Send message in chat or confirm in studio
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        const chatInput = document.getElementById('chatInput');
+        const chatInput = document.getElementById('chatTextarea') || document.getElementById('chatInput');
         if (document.activeElement === chatInput) {
             e.preventDefault();
-            const sendBtn = document.getElementById('sendBtn');
+            const sendBtn = document.getElementById('btnSend') || document.getElementById('sendBtn');
             if (sendBtn) sendBtn.click();
             return;
         }
