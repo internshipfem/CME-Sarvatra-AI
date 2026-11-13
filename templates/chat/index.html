@@ -697,6 +697,8 @@
                                 autocapitalize="off"
                                 spellcheck="false"
                                 data-lpignore="true"
+                                data-1p-ignore="true"
+                                data-bwignore="true"
                                 data-form-type="other"
                                 oninput="updateRegenerateButtonLabel()"
                                 onkeydown="if(event.key === 'Enter') { event.preventDefault(); handleDocumentRegenerate(); }"
@@ -797,7 +799,7 @@
             <div class="sec-form-group">
                 <label class="sec-label">SECURITY PASSCODE / PIN <span class="req">*</span></label>
                 <div class="sec-input-wrap">
-                    <input type="password" id="secLockPin" class="sec-input font-mono" placeholder="Enter 4–12 char PIN / passcode..." maxlength="32" autocomplete="new-password" data-lpignore="true" />
+                    <input type="password" id="secLockPin" name="officer_passcode" class="sec-input font-mono" placeholder="Enter 4–12 char PIN / passcode..." maxlength="32" autocomplete="one-time-code" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other" />
                     <button type="button" class="sec-eye-btn" onclick="togglePasscodeVisibility('secLockPin')" title="Show/Hide">
                         👁
                     </button>
@@ -873,7 +875,7 @@
             <div class="sec-form-group" style="margin-top: 14px;">
                 <label class="sec-label">ENTER OFFICER PIN / PASSCODE</label>
                 <div class="sec-input-wrap">
-                    <input type="password" id="unlockDocPin" class="sec-input font-mono sec-input-lg" placeholder="••••" maxlength="32" autocomplete="new-password" data-lpignore="true" onkeydown="if(event.key === 'Enter') handleVerifyPinSubmit('view')" />
+                    <input type="password" id="unlockDocPin" name="officer_unlock_pin" class="sec-input font-mono sec-input-lg" placeholder="••••" maxlength="32" autocomplete="one-time-code" data-lpignore="true" data-1p-ignore="true" data-bwignore="true" data-form-type="other" onkeydown="if(event.key === 'Enter') handleVerifyPinSubmit('view')" />
                     <button type="button" class="sec-eye-btn" onclick="togglePasscodeVisibility('unlockDocPin')">👁</button>
                 </div>
                 <div id="unlockErrorMessage" class="sec-error-text" style="display: none;"></div>

@@ -3837,9 +3837,8 @@ function openActivePdfPreview() {
 
 function printPdfFrame() {
     const frame = document.getElementById('pdfPreviewFrame');
-    if (frame && frame.contentWindow) {
-        frame.contentWindow.focus();
-        frame.contentWindow.print();
+    if (frame && frame.src) {
+        window.open(frame.src, '_blank');
     }
 }
 
@@ -3853,10 +3852,13 @@ window.openPdfInNewTab = openPdfInNewTab;
 
 function handleStudioPrint() {
     if (currentGeneratedDocId) {
-        openPdfPreview(`/api/documents/${currentGeneratedDocId}/pdf/`);
-        setTimeout(() => {
-            printPdfFrame();
-        }, 600);
+        const pdfUrl = `/api/documents/${currentGeneratedDocId}/pdf/?preview=1`;
+        const printWin = window.open(pdfUrl, '_blank');
+        if (printWin) {
+            printWin.focus();
+        } else {
+            openPdfPreview(pdfUrl);
+        }
     } else {
         window.print();
     }
