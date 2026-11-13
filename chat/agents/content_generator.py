@@ -245,6 +245,10 @@ def _apply_offline_revision(original_content, instruction):
         )
         return original_content + '\n\n' + new_para
 
+    # 0. Pure parameter changes (letterhead, date, recipient, classification) without body addition
+    if any(k in inst_lower for k in ['letterhead', 'faculty', 'wing', 'preset', 'classification']) and not any(k in inst_lower for k in ['add', 'para', 'text', 'content', 'rewrite', 'formal']):
+        return original_content
+
     # 5. Default amendment append
     paras = [p.strip() for p in original_content.split('\n\n') if p.strip()]
     para_num = len(paras) + 1

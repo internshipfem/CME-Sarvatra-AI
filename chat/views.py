@@ -327,10 +327,58 @@ def send_message_stream(request, conversation_id):
 
     ollama_history.append({'role': 'user', 'content': final_user_content})
 
+    # Dynamic Document Modification: Check if query modifies active document
+    active_doc = GeneratedDocument.objects.filter(conversation=conv).order_by('-created_at').first()
+    if not active_doc:
+        active_doc = GeneratedDocument.objects.filter(user=request.user).order_by('-created_at').first()
+
+    prompt_lower = (prompt or '').lower()
+    doc_mod_triggers = [
+        'change date', 'update date', 'set date',
+        'change letterhead', 'update letterhead', 'set letterhead',
+        'change wing', 'change faculty', 'change formation',
+        'change subject', 'update subject', 'change title',
+        'change recipient', 'change addressee', 'change to_name', 'change the recipient',
+        'make it formal', 'more formal', 'make it shorter', 'make it concise',
+        'add a paragraph', 'add para', 'add point',
+        'revise the document', 'revise letter', 'revise memo', 'revise doc',
+        'mark as secret', 'mark as confidential', 'change classification'
+    ]
+    is_doc_mod = bool(active_doc and any(t in prompt_lower for t in doc_mod_triggers))
+    revised_doc_payload = None
+
+    if is_doc_mod and active_doc:
+        try:
+            from chat.agents.orchestrator import revise_document
+            revised_doc_payload = revise_document(active_doc.id, prompt, user=request.user)
+            rev_obj = GeneratedDocument.objects.get(id=revised_doc_payload['document_id'])
+            if not rev_obj.conversation:
+                rev_obj.conversation = conv
+                rev_obj.save(update_fields=['conversation'])
+        except Exception as e:
+            is_doc_mod = False
+            revised_doc_payload = None
+
     # Generator for SSE Streaming
     def event_stream():
         full_response = []
         final_metrics = {}
+
+        if is_doc_mod and revised_doc_payload:
+            ack_msg = (
+                f"**Official Document Updated (Version {revised_doc_payload['version']})**\n\n"
+                f"Applied instruction: *\"{prompt.strip()}\"*\n\n"
+                f"- **Title / Subject:** {revised_doc_payload.get('title', 'Official Document')}\n"
+                f"- **Document Type:** {revised_doc_payload.get('doc_type_label', '')}\n"
+                f"- **Files Updated:** Word DOCX and PDF recompiled with new parameters.\n\n"
+                f"---\n\n"
+                f"{revised_doc_payload.get('generated_content', '')}"
+            )
+            full_response.append(ack_msg)
+            yield f"data: {json.dumps({'chunk': ack_msg})}\n\n"
+            yield f"data: {json.dumps({'done': True, 'metrics': {'total_time': 0.15}, 'doc_updated': revised_doc_payload})}\n\n"
+            Message.objects.create(conversation=conv, role='assistant', content=ack_msg)
+            return
 
         try:
             for item in ollama_client.stream_chat(

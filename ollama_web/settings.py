@@ -182,3 +182,6 @@ SQLITE_WAL_MODE = True
 SESSION_COOKIE_AGE = int(os.environ.get('DJANGO_SESSION_COOKIE_AGE', 7200))  # 2 hours
 SESSION_SAVE_EVERY_REQUEST = True
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+
+# Default Model for standard node deployment
+DEFAULT_MODEL = os.environ.get('DEFAULT_MODEL', 'llama3:latest')

@@ -57,7 +57,7 @@ def build_leave_application(fields, body_content):
     add_classification_stamp(doc, classification, is_top=True)
 
     # 2. CME Header / Station Header
-    add_header_block(doc)
+    add_header_block(doc, organization=fields.get('organization'), sub_header=fields.get('sub_header'))
 
     # 3. Military Metadata Table
     add_military_meta_table(doc, ref_no=ref_no, date_str=date_str, dept=from_dept, station=station)

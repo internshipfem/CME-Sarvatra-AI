@@ -115,6 +115,8 @@ def _format_paragraphs(text):
 
 
 def _build_formal_letter_html(fields, body_content, classification):
+    org_name = _escape(fields.get('organization') or 'COLLEGE OF MILITARY ENGINEERING').upper()
+    sub_header = _escape(fields.get('sub_header') or 'Dapodi, Pune – 411031 | Corps of Engineers')
     ref_no = _escape(fields.get('reference_number') or 'CME/CEW/2026/0001')
     date_str = _escape(fields.get('date') or '')
     to_name = _escape(fields.get('to_name') or fields.get('to') or 'The Commandant,\nCollege of Military Engineering, Pune').replace('\n', '<br/>')
@@ -133,8 +135,8 @@ def _build_formal_letter_html(fields, body_content, classification):
 
     html_content = f"""
     <div style="font-family: Arial, Helvetica, sans-serif; text-align: center; margin-top: 6px;">
-        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">COLLEGE OF MILITARY ENGINEERING</h1>
-        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">Dapodi, Pune - 411031 | Corps of Engineers</p>
+        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">{org_name}</h1>
+        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">{sub_header}</p>
         <hr style="border: none; border-top: 1.5px solid #0f172a; margin: 6px 0 14px 0;" />
     </div>
 
@@ -184,6 +186,8 @@ def _build_formal_letter_html(fields, body_content, classification):
 
 
 def _build_office_memo_html(fields, body_content, classification):
+    org_name = _escape(fields.get('organization') or 'COLLEGE OF MILITARY ENGINEERING').upper()
+    sub_header = _escape(fields.get('sub_header') or 'Dapodi, Pune – 411031 | Corps of Engineers')
     ref_no = _escape(fields.get('reference_number') or 'CME/MEMO/2026/001')
     date_str = _escape(fields.get('date') or '')
     to_val = _escape(fields.get('to') or fields.get('to_name') or 'All Concerned Officers & Branches')
@@ -208,8 +212,8 @@ def _build_office_memo_html(fields, body_content, classification):
 
     html_content = f"""
     <div style="font-family: Arial, Helvetica, sans-serif; text-align: center; margin-top: 6px;">
-        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">COLLEGE OF MILITARY ENGINEERING</h1>
-        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">Dapodi, Pune - 411031 | Corps of Engineers</p>
+        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">{org_name}</h1>
+        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">{sub_header}</p>
         <h2 style="font-size: 12.5pt; font-weight: bold; margin: 4px 0 2px 0; color: #0f172a; letter-spacing: 1px;">OFFICE MEMORANDUM</h2>
         <hr style="border: none; border-top: 1.5px solid #0f172a; margin: 6px 0 14px 0;" />
     </div>
@@ -237,6 +241,8 @@ def _build_office_memo_html(fields, body_content, classification):
 
 
 def _build_meeting_minutes_html(fields, body_content, classification):
+    org_name = _escape(fields.get('organization') or 'COLLEGE OF MILITARY ENGINEERING').upper()
+    sub_header = _escape(fields.get('sub_header') or 'Dapodi, Pune – 411031 | Corps of Engineers')
     title = _escape(fields.get('meeting_title') or fields.get('title') or 'CONFERENCE & COORD MEETING').upper()
     date_str = _escape(fields.get('date') or '')
     venue = _escape(fields.get('venue') or 'Conference Hall, CME')
@@ -271,8 +277,8 @@ def _build_meeting_minutes_html(fields, body_content, classification):
 
     html_content = f"""
     <div style="font-family: Arial, Helvetica, sans-serif; text-align: center; margin-top: 6px;">
-        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">COLLEGE OF MILITARY ENGINEERING</h1>
-        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">Dapodi, Pune - 411031 | Corps of Engineers</p>
+        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">{org_name}</h1>
+        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">{sub_header}</p>
         <h2 style="font-size: 12pt; font-weight: bold; margin: 4px 0 2px 0; color: #0f172a;">MINUTES OF MEETING: {title}</h2>
         <hr style="border: none; border-top: 1.5px solid #0f172a; margin: 6px 0 14px 0;" />
     </div>
@@ -304,6 +310,8 @@ def _build_meeting_minutes_html(fields, body_content, classification):
 
 
 def _build_office_note_html(fields, body_content, classification):
+    org_name = _escape(fields.get('organization') or 'COLLEGE OF MILITARY ENGINEERING').upper()
+    sub_header = _escape(fields.get('sub_header') or 'Dapodi, Pune – 411031 | Corps of Engineers')
     ref_no = _escape(fields.get('reference_number') or 'CME/NOTE/2026/001')
     date_str = _escape(fields.get('date') or '')
     subject = _clean_subject(fields.get('subject') or '')
@@ -323,8 +331,8 @@ def _build_office_note_html(fields, body_content, classification):
 
     html_content = f"""
     <div style="font-family: Arial, Helvetica, sans-serif; text-align: center; margin-top: 6px;">
-        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">COLLEGE OF MILITARY ENGINEERING</h1>
-        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">Dapodi, Pune - 411031 | Corps of Engineers</p>
+        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">{org_name}</h1>
+        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">{sub_header}</p>
         <h2 style="font-size: 12.5pt; font-weight: bold; margin: 4px 0 2px 0; color: #0f172a; letter-spacing: 1px;">OFFICE NOTE / NOTE SHEET</h2>
         <hr style="border: none; border-top: 1.5px solid #0f172a; margin: 6px 0 14px 0;" />
     </div>
@@ -349,6 +357,8 @@ def _build_office_note_html(fields, body_content, classification):
 
 
 def _build_office_order_html(fields, body_content, classification):
+    org_name = _escape(fields.get('organization') or 'COLLEGE OF MILITARY ENGINEERING').upper()
+    sub_header = _escape(fields.get('sub_header') or 'Dapodi, Pune – 411031 | Corps of Engineers')
     ref_no = _escape(fields.get('reference_number') or 'CME/ORDER/2026/001')
     date_str = _escape(fields.get('date') or '')
     subject = _clean_subject(fields.get('subject') or '')
@@ -380,8 +390,8 @@ def _build_office_order_html(fields, body_content, classification):
 
     html_content = f"""
     <div style="font-family: Arial, Helvetica, sans-serif; text-align: center; margin-top: 6px;">
-        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">COLLEGE OF MILITARY ENGINEERING</h1>
-        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">Dapodi, Pune - 411031 | Corps of Engineers</p>
+        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">{org_name}</h1>
+        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">{sub_header}</p>
         <h2 style="font-size: 12.5pt; font-weight: bold; margin: 4px 0 2px 0; color: #0f172a; letter-spacing: 1.5px;">OFFICE ORDER</h2>
         <hr style="border: none; border-top: 1.5px solid #0f172a; margin: 6px 0 14px 0;" />
     </div>
@@ -410,6 +420,8 @@ def _build_office_order_html(fields, body_content, classification):
 
 
 def _build_technical_report_html(fields, body_content, classification):
+    org_name = _escape(fields.get('organization') or 'COLLEGE OF MILITARY ENGINEERING').upper()
+    sub_header = _escape(fields.get('sub_header') or 'Dapodi, Pune – 411031 | Corps of Engineers')
     title = _escape(fields.get('title') or 'TECHNICAL & TRIAL EVALUATION REPORT').upper()
     ref_no = _escape(fields.get('reference_number') or 'CME/TR/2026/001')
     date_str = _escape(fields.get('date') or '')
@@ -433,8 +445,8 @@ def _build_technical_report_html(fields, body_content, classification):
 
     html_content = f"""
     <div style="font-family: Arial, Helvetica, sans-serif; text-align: center; margin-top: 6px;">
-        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">COLLEGE OF MILITARY ENGINEERING</h1>
-        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">Dapodi, Pune - 411031 | Corps of Engineers</p>
+        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">{org_name}</h1>
+        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">{sub_header}</p>
         <h2 style="font-size: 12pt; font-weight: bold; margin: 4px 0 2px 0; color: #0f172a; letter-spacing: 0.5px;">{title}</h2>
         <hr style="border: none; border-top: 1.5px solid #0f172a; margin: 6px 0 14px 0;" />
     </div>
@@ -461,6 +473,8 @@ def _build_technical_report_html(fields, body_content, classification):
 
 
 def _build_leave_application_html(fields, body_content, classification):
+    org_name = _escape(fields.get('organization') or 'COLLEGE OF MILITARY ENGINEERING').upper()
+    sub_header = _escape(fields.get('sub_header') or 'Dapodi, Pune – 411031 | Corps of Engineers')
     ref_no = _escape(fields.get('reference_number') or 'CME/LEAVE/2026/0001')
     date_str = _escape(fields.get('date') or '')
     to_name = _escape(fields.get('to_name') or 'The Commandant,<br/>College of Military Engineering,<br/>Dapodi, Pune – 411031')
@@ -479,8 +493,8 @@ def _build_leave_application_html(fields, body_content, classification):
 
     return f"""
     <div style="font-family: Arial, Helvetica, sans-serif; text-align: center; margin-top: 6px;">
-        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">COLLEGE OF MILITARY ENGINEERING</h1>
-        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">Dapodi, Pune – 411031 | Corps of Engineers</p>
+        <h1 style="font-size: 15pt; font-weight: bold; margin: 0; color: #0f172a; letter-spacing: 0.5px;">{org_name}</h1>
+        <p style="font-size: 9pt; font-style: italic; color: #475569; margin: 2px 0 6px 0;">{sub_header}</p>
         <hr style="border: none; border-top: 1.5px solid #0f172a; margin: 6px 0 14px 0;" />
     </div>
 

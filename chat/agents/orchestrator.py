@@ -190,6 +190,80 @@ def create_document(user, session_data, model_name=None, conversation=None):
     }
 
 
+
+def _extract_parameter_updates(instruction, fields):
+    """
+    Detect parameter modifications from user revision prompt
+    (e.g., date, letterhead, wing, subject, recipient, classification).
+    """
+    updated = dict(fields)
+    inst_lower = instruction.lower()
+
+    # 1. Date update: e.g. "change date to 20 Nov 2026", "date 15/12/2026"
+    date_match = re.search(
+        r'(?:change|update|set|make)\s+(?:the\s+)?date\s+(?:to\s+)?([0-9]{1,2}\s+[A-Za-z]{3,9}\s+[0-9]{4}|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4})',
+        inst_lower
+    )
+    if date_match:
+        updated['date'] = date_match.group(1).title()
+
+    # 2. Letterhead / Formation update
+    if any(k in inst_lower for k in ['combat engineering', 'fce']):
+        updated['organization'] = 'FACULTY OF COMBAT ENGINEERING'
+        updated['sub_header'] = 'College of Military Engineering, Dapodi, Pune – 411031'
+        updated['from_department'] = 'Faculty of Combat Engineering'
+    elif any(k in inst_lower for k in ['elec & mech', 'feme', 'electrical and mechanical']):
+        updated['organization'] = 'FACULTY OF ELEC & MECH ENGINEERING'
+        updated['sub_header'] = 'College of Military Engineering, Dapodi, Pune – 411031'
+        updated['from_department'] = 'Faculty of Electrical & Mechanical Engineering'
+    elif any(k in inst_lower for k in ['cadets training wing', 'ctw']):
+        updated['organization'] = 'CADETS TRAINING WING'
+        updated['sub_header'] = 'College of Military Engineering, Dapodi, Pune – 411031'
+        updated['from_department'] = 'Cadets Training Wing'
+    elif any(k in inst_lower for k in ['information technology', 'cme-it', 'it wing']):
+        updated['organization'] = 'FACULTY OF INFORMATION TECHNOLOGY'
+        updated['sub_header'] = 'College of Military Engineering, Dapodi, Pune – 411031'
+        updated['from_department'] = 'Faculty of Information Technology'
+    elif any(k in inst_lower for k in ['hq cme', 'headquarters cme', 'headquarters']):
+        updated['organization'] = 'COLLEGE OF MILITARY ENGINEERING'
+        updated['sub_header'] = 'Dapodi, Pune - 411031 | Corps of Engineers'
+        updated['from_department'] = 'Headquarters'
+    else:
+        lh_match = re.search(r'(?:change|set|update)\s+(?:the\s+)?letterhead\s+(?:to\s+)?(.+)', instruction, flags=re.IGNORECASE)
+        if lh_match:
+            custom_lh = lh_match.group(1).strip().rstrip('.')
+            updated['organization'] = custom_lh.upper()
+
+    # 3. Subject update – stop capture at comma, semicolon, or ' and <verb>'
+    subj_match = re.search(r'(?:change|update|set)\s+(?:the\s+)?subject\s+(?:to\s+)?([^,;]+?)(?:\s+and\s+(?:change|update|set)\b|[,;]|$)', instruction, flags=re.IGNORECASE)
+    if subj_match:
+        new_sub = subj_match.group(1).strip().rstrip('.')
+        if new_sub:
+            updated['subject'] = clean_subject(new_sub)
+
+    # 4. Recipient update – require explicit 'recipient' or 'addressee' keyword to avoid
+    #    false-positives from 'change to <classification>' / 'change to landscape' etc.
+    recip_match = re.search(r'(?:change|update|set)\s+(?:the\s+)?(?:recipient|addressee|to_name|to name)\s+(?:to\s+)?(.+)', instruction, flags=re.IGNORECASE)
+    if recip_match:
+        new_recip = recip_match.group(1).strip().rstrip('.')
+        # Guard: reject if the value is a classification keyword
+        _cls_words = {'secret', 'confidential', 'restricted', 'unclassified'}
+        if new_recip.lower() not in _cls_words:
+            updated['to_name'] = new_recip
+            updated['to'] = new_recip
+
+    # 5. Classification update
+    if 'secret' in inst_lower:
+        updated['classification'] = 'SECRET'
+    elif 'confidential' in inst_lower:
+        updated['classification'] = 'CONFIDENTIAL'
+    elif 'restricted' in inst_lower:
+        updated['classification'] = 'RESTRICTED'
+    elif 'unclassified' in inst_lower:
+        updated['classification'] = 'UNCLASSIFIED'
+
+    return updated
+
 def revise_document(document_id, revision_instruction, user):
     """Revise an existing document via user instruction, or retry fresh if instruction is empty."""
     original = GeneratedDocument.objects.get(id=document_id, user=user)
@@ -201,6 +275,8 @@ def revise_document(document_id, revision_instruction, user):
     revision_instruction = (revision_instruction or '').strip()
 
     if revision_instruction:
+        # Dynamically update metadata parameters from user query (date, letterhead, subject, etc.)
+        original_fields = _extract_parameter_updates(revision_instruction, original_fields)
         # LLM revision call applying user's modification instructions
         result = revise_content(
             original.generated_content,
@@ -224,8 +300,8 @@ def revise_document(document_id, revision_instruction, user):
         user=user,
         conversation=original.conversation,
         document_type=original.document_type,
-        title=original.title,
-        fields_json=original.fields_json,
+        title=original_fields.get('subject') or original.title,
+        fields_json=json.dumps(original_fields),
         generated_content=new_text,
         model_used=result['model'],
         generation_time=result['generation_time'],
@@ -246,6 +322,7 @@ def revise_document(document_id, revision_instruction, user):
         'doc_type': doc.document_type,
         'doc_type_label': DOCUMENT_TYPE_LABELS.get(doc.document_type, doc.document_type),
         'generated_content': new_text,
+        'fields': original_fields,
         'model_used': result['model'],
         'generation_time': result['generation_time'],
         'file_size': doc.format_size(),

@@ -106,14 +106,17 @@ def add_classification_stamp(doc, classification, is_top=True):
     return p
 
 
-def add_header_block(doc, sub_title=None):
-    """Add official CME stationery header with horizontal divider."""
+def add_header_block(doc, sub_title=None, organization=None, sub_header=None):
+    """Add official military stationery header with horizontal divider."""
+    org_text = (organization or "COLLEGE OF MILITARY ENGINEERING").strip().upper()
+    sub_text = (sub_header or "Dapodi, Pune - 411031 | Corps of Engineers").strip()
+
     # Line 1: Organization Name
     p_org = doc.add_paragraph()
     p_org.alignment = ALIGN_CENTER
     p_org.paragraph_format.space_before = Pt(0)
     p_org.paragraph_format.space_after = Pt(2)
-    r_org = p_org.add_run("COLLEGE OF MILITARY ENGINEERING")
+    r_org = p_org.add_run(org_text)
     r_org.font.name = FONT_NAME
     r_org.font.size = FONT_SIZE_TITLE
     r_org.font.bold = True
@@ -124,7 +127,7 @@ def add_header_block(doc, sub_title=None):
     p_sub.alignment = ALIGN_CENTER
     p_sub.paragraph_format.space_before = Pt(0)
     p_sub.paragraph_format.space_after = Pt(4)
-    r_sub = p_sub.add_run("Dapodi, Pune - 411031 | Corps of Engineers")
+    r_sub = p_sub.add_run(sub_text)
     r_sub.font.name = FONT_NAME
     r_sub.font.size = Pt(9.5)
     r_sub.font.italic = True

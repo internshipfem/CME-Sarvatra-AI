@@ -1,4 +1,62 @@
 
+const LETTERHEAD_PRESETS = {
+    'hq_cme': {
+        org: 'COLLEGE OF MILITARY ENGINEERING',
+        sub: 'Dapodi, Pune - 411031 | Corps of Engineers',
+        dept: 'Combat Engineering Wing'
+    },
+    'fce': {
+        org: 'FACULTY OF COMBAT ENGINEERING',
+        sub: 'College of Military Engineering, Dapodi, Pune – 411031',
+        dept: 'Faculty of Combat Engineering'
+    },
+    'feme': {
+        org: 'FACULTY OF ELEC & MECH ENGINEERING',
+        sub: 'College of Military Engineering, Dapodi, Pune – 411031',
+        dept: 'Faculty of Electrical & Mechanical Engineering'
+    },
+    'ctw': {
+        org: 'CADETS TRAINING WING',
+        sub: 'College of Military Engineering, Dapodi, Pune – 411031',
+        dept: 'Cadets Training Wing'
+    },
+    'cme_it': {
+        org: 'FACULTY OF INFORMATION TECHNOLOGY',
+        sub: 'College of Military Engineering, Dapodi, Pune – 411031',
+        dept: 'Faculty of Information Technology'
+    }
+};
+
+function onLetterheadPresetChanged(val) {
+    if (val === 'custom') {
+        const customOrg = prompt('Enter Organization / Unit Name:', 'COLLEGE OF MILITARY ENGINEERING');
+        if (customOrg) {
+            const customSub = prompt('Enter Station / Subtitle:', 'Dapodi, Pune – 411031 | Indian Army');
+            updatePaperLetterhead(customOrg.toUpperCase(), customSub || '', 'General Staff Branch');
+        }
+        return;
+    }
+    const preset = LETTERHEAD_PRESETS[val];
+    if (preset) {
+        updatePaperLetterhead(preset.org, preset.sub, preset.dept);
+    }
+}
+
+function updatePaperLetterhead(org, sub, dept) {
+    const orgEl = document.getElementById('docPaperOrg');
+    const subEl = document.getElementById('docPaperSub');
+    const wingEl = document.getElementById('docPaperWing');
+    if (orgEl) orgEl.textContent = org;
+    if (subEl) subEl.textContent = sub;
+    if (wingEl && dept) wingEl.textContent = dept;
+    if (typeof saveDocumentContentChanges === 'function' && currentGeneratedDocId) {
+        saveDocumentContentChanges();
+    }
+}
+window.onLetterheadPresetChanged = onLetterheadPresetChanged;
+window.updatePaperLetterhead = updatePaperLetterhead;
+
+
 function detectDocumentIntent(text) {
     if (!text || typeof text !== 'string') return null;
     const lower = text.toLowerCase();
@@ -469,6 +527,30 @@ async function sendMessage() {
                         accumulatedText += payload.chunk;
                         bubbleTarget.innerHTML = renderMarkdownText(accumulatedText);
                         scrollToBottom();
+                    }
+
+                    if (payload.doc_updated) {
+                        currentGeneratedDocId = payload.doc_updated.document_id;
+                        const updateCard = document.createElement('div');
+                        updateCard.className = 'chat-doc-updated-card';
+                        updateCard.style.cssText = 'margin-top: 10px; padding: 10px 14px; background: rgba(15, 23, 42, 0.95); border: 1px solid #22c55e; border-radius: 8px; display: flex; align-items: center; justify-content: space-between; gap: 12px;';
+                        updateCard.innerHTML = `
+                            <div style="display: flex; align-items: center; gap: 10px;">
+                                <div style="width: 28px; height: 28px; border-radius: 6px; background: #14532d; display: flex; align-items: center; justify-content: center; font-size: 14px; color: #22c55e;">✓</div>
+                                <div>
+                                    <div style="font-size: 0.82rem; font-weight: 600; color: #f8fafc;">${escapeHtml(payload.doc_updated.title || 'Official Document')} (v${payload.doc_updated.version})</div>
+                                    <div style="font-size: 0.72rem; color: #86efac;">Word DOCX &amp; PDF recompiled with new parameters</div>
+                                </div>
+                            </div>
+                            <div style="display: flex; gap: 6px;">
+                                <button type="button" onclick="openPdfPreview('/api/documents/${payload.doc_updated.document_id}/pdf/')" class="btn-sec-cancel" style="padding: 5px 10px; font-size: 0.72rem; cursor: pointer;">Preview PDF</button>
+                                <button type="button" onclick="window.location.href='/api/documents/${payload.doc_updated.document_id}/download/'" class="btn-sec-unlock" style="padding: 5px 10px; font-size: 0.72rem; cursor: pointer;">Download</button>
+                            </div>
+                        `;
+                        bubbleTarget.parentElement.appendChild(updateCard);
+                        if (typeof loadDocumentIntoStudio === 'function') {
+                            loadDocumentIntoStudio(payload.doc_updated);
+                        }
                     }
 
                     if (payload.done && payload.metrics) {
@@ -1848,6 +1930,15 @@ function collectCurrentFormFields() {
     if (!fields.from_department) fields.from_department = window.USER_DEPT || 'Combat Engineering Wing';
     if (!fields.from_employee_id) fields.from_employee_id = window.USER_EMP_ID || 'EMP-001';
 
+    const lhPreset = document.getElementById('doc_field_letterhead_preset')?.value;
+    if (lhPreset && LETTERHEAD_PRESETS[lhPreset]) {
+        if (!fields.organization) fields.organization = LETTERHEAD_PRESETS[lhPreset].org;
+        if (!fields.sub_header) fields.sub_header = LETTERHEAD_PRESETS[lhPreset].sub;
+        if (!fields.from_department || fields.from_department === 'Combat Engineering Wing') {
+            fields.from_department = LETTERHEAD_PRESETS[lhPreset].dept;
+        }
+    }
+
     fields.signature_style = currentPreviewSigStyle || window.USER_SIG_STYLE || 'military';
     const sigAssetVal = activeSignatureAssetId || document.getElementById('doc_field_signature_asset')?.value || '';
     if (sigAssetVal === 'none') {
@@ -2265,6 +2356,12 @@ function extractPaperBodyText() {
 
 function extractPaperAllFields() {
     const fields = collectCurrentFormFields();
+
+    const org = document.getElementById('docPaperOrg')?.innerText?.trim();
+    if (org) fields.organization = org;
+
+    const subHeader = document.getElementById('docPaperSub')?.innerText?.trim();
+    if (subHeader) fields.sub_header = subHeader;
 
     const ref = document.getElementById('docPaperRef')?.innerText?.trim();
     if (ref) fields.reference_number = ref;

@@ -580,6 +580,22 @@
                                 </div>
                             </div>
 
+                            <!-- Station Letterhead / Formation Preset Selector -->
+                            <div class="form-group" style="margin-top: 10px; margin-bottom: 8px;">
+                                <label class="form-label" style="font-size: 0.72rem; color: #94a3b8; text-transform: uppercase; display: flex; align-items: center; justify-content: space-between;">
+                                    <span>Station Letterhead / Formation</span>
+                                    <span style="font-size: 0.65rem; color: #38bdf8;">Dynamic</span>
+                                </label>
+                                <select id="doc_field_letterhead_preset" class="form-control" style="background:#0f172a; border-color:#334155; color:#f8fafc;" onchange="onLetterheadPresetChanged(this.value)">
+                                    <option value="hq_cme">HQ CME Dapodi (Command Standard)</option>
+                                    <option value="fce">Faculty of Combat Engineering (FCE)</option>
+                                    <option value="feme">Faculty of Elec &amp; Mech Engineering (FEME)</option>
+                                    <option value="ctw">Cadets Training Wing (CTW)</option>
+                                    <option value="cme_it">Faculty of Information Technology (CME-IT)</option>
+                                    <option value="custom">Custom Formation / Unit...</option>
+                                </select>
+                            </div>
+
                             <!-- Collapsible Signatory & Authority Section -->
                             <div class="studio-ext-box" style="margin-top: 10px;">
                                 <button type="button" class="studio-ext-btn" id="btnToggleSignatory" onclick="toggleSignatoryFields()">

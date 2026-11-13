@@ -58,7 +58,7 @@ def build_office_memo(fields, body_content):
     add_classification_stamp(doc, classification, is_top=True)
 
     # 2. CME Header
-    add_header_block(doc, sub_title="OFFICE MEMORANDUM")
+    add_header_block(doc, sub_title="OFFICE MEMORANDUM", organization=fields.get("organization"), sub_header=fields.get("sub_header"))
 
     # 3. Metadata Table
     metadata = [

@@ -49,7 +49,7 @@ def build_office_note(fields, body_content):
     add_classification_stamp(doc, classification, is_top=True)
 
     # 2. CME Header
-    add_header_block(doc, sub_title="OFFICE NOTE / NOTE SHEET")
+    add_header_block(doc, sub_title="OFFICE NOTE / NOTE SHEET", organization=fields.get("organization"), sub_header=fields.get("sub_header"))
 
     # 3. Metadata Rows
     metadata = [
@@ -106,7 +106,7 @@ def build_office_order(fields, body_content):
     add_classification_stamp(doc, classification, is_top=True)
 
     # 2. CME Header
-    add_header_block(doc, sub_title="OFFICE ORDER")
+    add_header_block(doc, sub_title="OFFICE ORDER", organization=fields.get("organization"), sub_header=fields.get("sub_header"))
 
     # 3. Metadata Rows
     metadata = [
@@ -191,7 +191,7 @@ def build_technical_report(fields, body_content):
     add_classification_stamp(doc, classification, is_top=True)
 
     # 2. CME Header
-    add_header_block(doc, sub_title=title)
+    add_header_block(doc, sub_title=title, organization=fields.get("organization"), sub_header=fields.get("sub_header"))
 
     # 3. Metadata Rows
     metadata = [
