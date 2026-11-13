@@ -577,7 +577,12 @@ def build_pdf_document(doc_type, fields, body_content, passcode=None):
 
     for i, page in enumerate(doc):
         # Subtle diagonal DRAFT watermark only when explicitly marked as draft
-        is_draft = bool(fields.get('_is_draft', False)) and not bool(fields.get('is_final', False))
+        if '_is_draft' in fields:
+            is_draft = bool(fields['_is_draft'])
+        elif 'is_final' in fields:
+            is_draft = not bool(fields['is_final'])
+        else:
+            is_draft = False
         if is_draft:
             point = fitz.Point(140, 520)
             page.insert_text(

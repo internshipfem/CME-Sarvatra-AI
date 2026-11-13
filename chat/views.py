@@ -722,6 +722,7 @@ def download_pdf_api(request, document_id):
 
     # Attach draft status & signature image path
     fields['_is_draft'] = not doc.is_final
+    fields['is_final'] = doc.is_final
     if doc.signature_asset and doc.signature_asset.image and os.path.exists(doc.signature_asset.image.path):
         fields['_signature_image_path'] = doc.signature_asset.image.path
     elif fields.get('_signature_asset_id') and fields['_signature_asset_id'] != 'none':
